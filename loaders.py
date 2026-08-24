@@ -89,6 +89,48 @@ def load_image(path, strip_chrome=True, chroma_tol=12, clip=(0.5, 99.5)):
     return img
 
 
+def load_asymmetry_map(path, mode="rb", clip=(0.5, 99.5)):
+    """
+    Load an ALREADY-CODED signed asymmetry map and decode it to the continuous
+    order parameter m(x,y) in [-1, 1] -- red/blue up/down or black/white
+    up/down -- WITHOUT the grayscale luminance path (which destroys the sign:
+    pure red and pure blue have the same (R+G+B)/3, and strip_chrome would
+    delete the colored domains as if they were UI).
+
+    mode:
+      "rb"  blue-red diverging map (neutral = white or black):
+            m = (B - R) / (B + R + eps)   -> blue -> +1, red -> -1, white/black -> 0
+            This matches the toolkit's OWN convention (blue = +1), so no sign
+            flip is needed and the decoded field renders identically on export.
+      "bw"  black-white grayscale map (neutral = mid-gray):
+            m = 2*I_norm - 1              -> white -> +1, black -> -1, mid -> 0
+            I_norm is percentile-normalized to [0,1] (hot/dead-pixel robust).
+
+    Unlike load_image this does NOT strip chrome (colored domains ARE the data)
+    and does NOT flatten -- a finished asymmetry map is already background-
+    corrected, so the caller feeds the result straight in as the flattened
+    field and skips illumination flattening. Restrict to the flake with a
+    polygon/box ROI (or the local-contrast auto-detector) downstream.
+
+    Returns a float array m in [-1, 1], shape (H, W).
+    """
+    mode = str(mode).lower()
+    im = Image.open(path)
+    if mode == "bw":
+        gray = np.asarray(im.convert("F")).astype(float)
+        lo, hi = np.percentile(gray, clip)
+        if hi <= lo:
+            lo, hi = gray.min(), gray.max()
+        inorm = np.clip((gray - lo) / (hi - lo + 1e-12), 0.0, 1.0)
+        return 2.0 * inorm - 1.0
+    if mode == "rb":
+        rgb = np.asarray(im.convert("RGB")).astype(float)
+        R, B = rgb[..., 0], rgb[..., 2]
+        m = (B - R) / (B + R + 1e-6)          # blue -> +1, red -> -1, white/black -> ~0
+        return np.clip(m, -1.0, 1.0)
+    raise ValueError(f"unknown asymmetry-map mode {mode!r} (expected 'rb' or 'bw')")
+
+
 def load_xy_mz_txt(path, mz_round=True, delimiter=None):
     """
     Build an (H, W) integer m_z grid from a whitespace/CSV text file with

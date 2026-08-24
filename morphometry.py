@@ -203,8 +203,20 @@ def domain_width(mask, um_per_px=None, min_px=0):
                     "units": "um" if um_per_px else "px"})
         return out
 
-    dt = ndi.distance_transform_edt(mask)
-    skel = skeletonize(mask)
+    # Crop to the mask's bounding box (pad 1 so a background border remains,
+    # keeping the distance transform identical) before the distance-transform
+    # and skeletonize. Both are O(pixels); when the domains occupy only part of
+    # a large frame (a polygon ROI in a multi-MP image) this avoids processing
+    # the empty margin. dt/skel are scattered back to full size so callers
+    # (width map, skeleton overlay) are unaffected.
+    ys, xs = np.where(mask)
+    y0, y1 = max(ys.min() - 1, 0), min(ys.max() + 2, mask.shape[0])
+    x0, x1 = max(xs.min() - 1, 0), min(xs.max() + 2, mask.shape[1])
+    sub = mask[y0:y1, x0:x1]
+    dt_sub = ndi.distance_transform_edt(sub)
+    skel_sub = skeletonize(sub)
+    dt = np.zeros(mask.shape); dt[y0:y1, x0:x1] = dt_sub
+    skel = np.zeros(mask.shape, bool); skel[y0:y1, x0:x1] = skel_sub
     widths_px = 2.0 * dt[skel]                     # local full width on the spine
     skel_len = _skeleton_length_px(skel)
 
@@ -589,6 +601,7 @@ def export_domain_summary(mz, roi, um_per_px=None, min_px=12, connectivity=1,
             row = {"state": state, **summary[state]}
             w.writerow({c: row.get(c) for c in cols})
     return summary, out_path
+
 
 
 def export_fit_summary(mm, um_per_px=None, out_path="fits.txt", title="", min_px=None):

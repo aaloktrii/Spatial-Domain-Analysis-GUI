@@ -21,13 +21,16 @@ import datetime
 import numpy as np
 
 import analyze as ANALYZE
+from defaults import DEFAULTS
 from scipy import ndimage as ndi
 from xmcd_toolkit import (
     analyze_xmcd, three_state_field, despeckle_mz, pdf_three_state, per_state_morphometry,
     make_width_area_count_figure, make_width_distribution_figure, make_period_distribution_figure,
     make_qq_plot_figure, qq_series_per_state, make_lognormal_gaussian_comparison_figure,
     compare_lognormal_gaussian, domain_counts_areas,
-    area_averaged_mz, net_mz_raw, fit_lognormal,
+    area_averaged_mz, net_mz_raw, fit_lognormal, correlation_length_state,
+    domain_widths, WIDTH_METHOD_LABELS,
+    domain_boundary, asymmetry_field,
     COLOR_UP, COLOR_DOWN,
 )
 
@@ -43,16 +46,29 @@ def _domain_areas(mz, state, min_px=12, connectivity=1):
 
 
 # ----------------------------------------------------------------------
+_POLY_CACHE = {}   # (vertices, shape) -> mask; rasterizing is ~20ms, and the
+                   # polygon is unchanged across the many threshold-slider
+                   # previews between edits, so cache the last few.
+
 def polygon_to_mask(vertices, shape):
-    """Boolean mask for a polygon given (x, y) vertices and image shape (H, W)."""
+    """Boolean mask for a polygon given (x, y) vertices and image shape (H, W).
+    Cached on (vertices, shape): dragging the m-threshold slider re-previews
+    with the same polygon, so the rasterization is reused instead of redone."""
     from skimage.draw import polygon as sk_polygon
-    mask = np.zeros(shape, bool)
     if not vertices or len(vertices) < 3:
-        return mask
+        return np.zeros(shape, bool)
+    key = (tuple(map(tuple, vertices)), tuple(shape))
+    hit = _POLY_CACHE.get(key)
+    if hit is not None:
+        return hit
+    mask = np.zeros(shape, bool)
     xs = np.array([v[0] for v in vertices], float)
     ys = np.array([v[1] for v in vertices], float)
     rr, cc = sk_polygon(ys, xs, shape)
     mask[rr, cc] = True
+    _POLY_CACHE[key] = mask
+    if len(_POLY_CACHE) > 8:                      # cap memory (LRU-ish)
+        _POLY_CACHE.pop(next(iter(_POLY_CACHE)))
     return mask
 
 
@@ -122,14 +138,16 @@ def resolve_um(params, shape):
 _PREP_CACHE = {}
 _PREP_ORDER = []
 
-def _prep(path, clahe, flatten=True, flatten_sigma=25.0, tv_weight=0.12):
+def _prep(path, clahe, flatten=True, flatten_sigma=25.0, tv_weight=0.12,
+          denoise_method="tv", input_mode="grayscale", map_mode="rb"):
     # The cache key tracks the state of every toggle/slider that feeds this
-    # expensive step. tv_weight belongs here (not in preview_polygon) because
-    # it drives the TV-Chambolle denoise inside analyze_xmcd itself -- the
-    # same "compute once, cache" step as flatten_sigma. Changing it is a cache
-    # miss, so it re-runs the full (slow) denoise, same as flatten_sigma does.
+    # expensive step. tv_weight/denoise_method belong here (not in
+    # preview_polygon) because they drive the denoise inside analyze_xmcd --
+    # the same "compute once, cache" step as flatten_sigma. Changing any is a
+    # cache miss, so it re-runs the full (slow) denoise. input_mode/map_mode
+    # change how the image is decoded, so they belong in the key too.
     key = (os.path.abspath(path), bool(clahe), bool(flatten), float(flatten_sigma),
-           float(tv_weight))
+           float(tv_weight), str(denoise_method), str(input_mode), str(map_mode))
     if key not in _PREP_CACHE:
 
         # --- SAFE FALLBACK: If disabled, use a massive sigma ---
@@ -138,8 +156,18 @@ def _prep(path, clahe, flatten=True, flatten_sigma=25.0, tv_weight=0.12):
         sigma_val = float(flatten_sigma) if flatten else 999.0
         # --------------------------------------------------------
 
+        # This cached step only needs img/flat/den, and the flattened field
+        # (Gaussian high-pass, or the map decode) does NOT depend on the ROI.
+        # So skip analyze_xmcd's expensive auto-ROI segmentation (morphological
+        # closing + fill-holes on a multi-MP frame, ~seconds) by handing it a
+        # whole-image box -- the real ROI is the polygon, applied downstream in
+        # preview_polygon / analyze_with_polygon. Saves several seconds per
+        # cold prep (each tv_weight / denoiser / sigma change).
         _, layers = analyze_xmcd(path, clahe=clahe, flatten_sigma=sigma_val,
-                                 tv_weight=float(tv_weight))
+                                 tv_weight=float(tv_weight),
+                                 denoise_method=str(denoise_method),
+                                 input_mode=str(input_mode), map_mode=str(map_mode),
+                                 roi_box=(0, 0, 10**9, 10**9))
 
         _PREP_CACHE[key] = {"img": layers["img"], "flat": layers["flat"],
                             "den": layers["denoised"]}
@@ -159,6 +187,15 @@ def clear_cache(path=None):
         _PREP_ORDER[:] = [k for k in _PREP_ORDER if k[0] != ap]
 
 
+def _compute_boundary(layers, roi, params):
+    """Domain-boundary overlay from the selected method (methods/boundary.py).
+    zero_contour/threshold are fast; chan_vese is slower (only when picked)."""
+    method = params.get("boundary_method", "zero_contour")
+    m, _ = asymmetry_field(layers)
+    return domain_boundary(m, roi, method=method,
+                           m_threshold=params.get("m_threshold", 0.05))
+
+
 def preview_polygon(path, params):
     """FAST preview: reuse the cached flattened field and recompute only the
     threshold-dependent three-state map, distributions, and morphometry.
@@ -172,7 +209,10 @@ def preview_polygon(path, params):
                  params.get("clahe", False),
                  params.get("flatten", True),
                  params.get("flatten_sigma", 25.0),
-                 params.get("tv_weight", 0.12))
+                 params.get("tv_weight", 0.12),
+                 params.get("denoise_method", "tv"),
+                 params.get("input_mode", "grayscale"),
+                 params.get("map_mode", "rb"))
     shape = prep["flat"].shape
     roi_mask = polygon_to_mask(poly, shape) if poly else np.ones(shape, bool)
     um, warn = resolve_um(params, shape)
@@ -180,8 +220,10 @@ def preview_polygon(path, params):
     # background region: set the magnetic zero from its mean (same rule as
     # analyze_xmcd's bg path), computed on the cached denoised image so the
     # preview matches the full export exactly.
+    # A pre-coded asymmetry map is already background-corrected and centered at
+    # 0, so a background-region zero doesn't apply -- use the decoded field as-is.
     bg_poly = params.get("bg_polygon")
-    if bg_poly:
+    if bg_poly and params.get("input_mode", "grayscale") != "asymmetry_map":
         bg = polygon_to_mask(bg_poly, shape)
         flat = (prep["den"] - float(prep["den"][bg].mean())) if bg.any() else prep["flat"]
     else:
@@ -201,11 +243,33 @@ def preview_polygon(path, params):
     # see net_mz_raw's docstring for why this sits between the discrete
     # (pl["net_m"]) and continuous (aa) definitions.
     hy = net_mz_raw(mz, layers)
+    # per-state correlation length: the up/down domain SIZE, robust to the
+    # tv_weight/threshold choice (FFT autocorrelation, no skeleton).
+    # compute the FFT correlation length ONCE (in px) and reuse it for both the
+    # per-state xi readout and the correlation_length width method, instead of
+    # running the same FFT autocorrelation 4x per preview.
+    xu_px = correlation_length_state(mz, roi, 1, um_per_px=None)
+    xd_px = correlation_length_state(mz, roi, -1, um_per_px=None)
+    _sc = (um * 1000.0) if um else 1.0            # px -> nm when calibrated
+    xi = {"up": xu_px * _sc, "down": xd_px * _sc}
+    # all width methods (reuse mm for the skeleton, xi_px for the FFT) ->
+    # readout shows the one picked by params["width_method"], export writes
+    # the full comparison.
+    widths = domain_widths(mz, roi, um_per_px=um, min_px=params.get("min_px", 12),
+                           mm=mm, xi_px=(xu_px, xd_px))
+    # the boundary overlay (find_contours / chan_vese) is only drawn when the
+    # "show boundary" checkbox is on, so only compute it then -- it is ~0.4s on
+    # a multi-MP frame and would otherwise slow every threshold-slider preview.
+    if params.get("show_boundary", False):
+        boundary = _compute_boundary(layers, roi, params)
+    else:
+        boundary = {"edge": None, "contours": None}
     return {
         "img": prep["img"], "mz": mz, "roi": roi, "layers": layers,
         "um": um, "fov_warn": warn, "shape": shape,
         "pdf": pl, "morphometry": mm, "counts": counts, "params": params,
-        "area_avg_mz": aa, "net_mz_raw": hy,
+        "area_avg_mz": aa, "net_mz_raw": hy, "xi": xi, "widths": widths,
+        "boundary": boundary,
     }
 
 
@@ -244,8 +308,13 @@ def analyze_with_polygon(path, params):
         prep = _prep(path, clahe,
                      params.get("flatten", True),
                      params.get("flatten_sigma", 25.0),
-                     params.get("tv_weight", 0.12))
-        if bg_mask is not None and bg_mask.any():
+                     params.get("tv_weight", 0.12),
+                     params.get("denoise_method", "tv"),
+                     params.get("input_mode", "grayscale"),
+                     params.get("map_mode", "rb"))
+        # a pre-coded map is already centered -> ignore any background region
+        if (bg_mask is not None and bg_mask.any()
+                and params.get("input_mode", "grayscale") != "asymmetry_map"):
             flat = prep["den"] - float(prep["den"][bg_mask].mean())
         else:
             flat = prep["flat"]
@@ -253,7 +322,10 @@ def analyze_with_polygon(path, params):
     else:
         _, layers = analyze_xmcd(path, clahe=clahe, roi_mask=roi_mask, bg_mask=bg_mask,
                                  connectivity=params.get("connectivity", 1),
-                                 tv_weight=params.get("tv_weight", 0.12))
+                                 tv_weight=params.get("tv_weight", 0.12),
+                                 denoise_method=params.get("denoise_method", "tv"),
+                                 input_mode=params.get("input_mode", "grayscale"),
+                                 map_mode=params.get("map_mode", "rb"))
     mz, roi = three_state_field(layers, z_neutral=z_neutral, m_threshold=m_threshold)
     mz = despeckle_mz(mz, min_px=params.get("min_px", 12))
 
@@ -268,12 +340,18 @@ def analyze_with_polygon(path, params):
     # see net_mz_raw's docstring for why this sits between the discrete
     # (pl["net_m"]) and continuous (aa) definitions.
     hy = net_mz_raw(mz, layers)
+    # per-state correlation length (up/down domain size), robust to tv_weight.
+    xi = {"up": correlation_length_state(mz, roi, 1, um_per_px=um),
+          "down": correlation_length_state(mz, roi, -1, um_per_px=um)}
+    widths = domain_widths(mz, roi, um_per_px=um, min_px=params.get("min_px", 12), mm=mm)
+    boundary = _compute_boundary(layers, roi, params)
 
     return {
         "img": layers["img"], "mz": mz, "roi": roi, "layers": layers,
         "um": um, "fov_warn": fov_warn, "shape": shape,
         "pdf": pl, "morphometry": mm, "counts": counts, "params": params,
-        "area_avg_mz": aa, "net_mz_raw": hy,
+        "area_avg_mz": aa, "net_mz_raw": hy, "xi": xi, "widths": widths,
+        "boundary": boundary,
     }
 
 
@@ -286,19 +364,15 @@ def summary_text(res):
     pl = res["pdf"]; mm = res["morphometry"]; aa = res["area_avg_mz"]; hy = res["net_mz_raw"]
     npx = int(res["roi"].sum())
     area = npx * (um * um) if um else npx
-    up_width = mm["up"]["width_median_nm"] if um else mm["up"]["width_median"]
-    dn_width = mm["down"]["width_median_nm"] if um else mm["down"]["width_median"]
     period = mm.get("domain_period_nm", mm["domain_period"]) if um else mm["domain_period"]
-    # fitted log-normal median/mode on the SAME samples fits.txt reports, so
-    # the live readout and the exported fit summary agree (the raw sample
-    # median above is a different statistic and can differ by >20%).
-    w_scale = (um * 1000.0) if um else 1.0
-    fit_up = fit_lognormal(mm["up"]["widths_px"] * w_scale)
-    fit_dn = fit_lognormal(mm["down"]["widths_px"] * w_scale)
-    _v = lambda fit, k: f"{fit[k]:.1f}" if fit else "n/a"
-    # Compact, fixed-width block -- this is rendered as a corner overlay on the
-    # GUI image panel, so line LENGTH matters: long trailing parentheticals
-    # push the box over the image and into the legend.
+    # primary width comes from the SELECTED method (params["width_method"]);
+    # all methods are shown compactly beneath it for side-by-side comparison.
+    widths = res.get("widths", {})
+    method = res.get("params", {}).get("width_method", "perimeter_area")
+    _abbr = {"perimeter_area": "2A/P", "skeleton_mean": "sk-mean",
+             "skeleton_median": "sk-med", "correlation_length": "xi"}
+    _f = lambda v: f"{v:.1f}" if v == v else "n/a"   # NaN-safe
+    sel = widths.get(method, {"up": float("nan"), "down": float("nan")})
     lines = [
         f"active area  = {area:.1f} {'um^2' if um else 'px'} ({npx} px)",
         f"P(up/0/dn)   = {pl['p_up']:.3f} / {pl['p_zero']:.3f} / {pl['p_down']:.3f}",
@@ -307,10 +381,17 @@ def summary_text(res):
          if hy["mean_mz"] == hy["mean_mz"] else
          "net <m_z> raw= n/a (no px cleared threshold)"),
         f"area-avg<m_z>= {aa['mean_mz']:+.3f}  (pre-thr, N={aa['N_pixels']})",
-        f"width [{w_unit}] raw med : up={up_width:.1f} dn={dn_width:.1f}",
-        f"          fit med : up={_v(fit_up,'median')} dn={_v(fit_dn,'median')}",
-        f"          fit mode: up={_v(fit_up,'mode')} dn={_v(fit_dn,'mode')}",
-        f"period ~ {period:.1f} {w_unit}",
+        f"w+/w- [{_abbr.get(method, method)}] = {_f(sel['up'])} / {_f(sel['down'])} {w_unit}  (selected)",
+    ]
+    if widths:
+        lines.append("  all methods [" + w_unit + "]:")
+        for m in ("perimeter_area", "skeleton_mean", "skeleton_median", "correlation_length"):
+            w = widths.get(m)
+            if w:
+                mark = " *" if m == method else "  "
+                lines.append(f"   {_abbr[m]:>7}{mark} up={_f(w['up'])} dn={_f(w['down'])}")
+    lines.append(f"period ~ {period:.1f} {w_unit}")
+    lines += [
         f"calibration  = {f'{um:.4f} um/px' if um else 'uncalibrated (px)'}",
     ]
     counts = res.get("counts")
@@ -325,21 +406,36 @@ def summary_text(res):
 
 # ----------------------------------------------------------------------
 def build_args(params):
+    """Build the analyze_one args Namespace from the GUI params, so the EXPORT
+    (analyze_one) uses exactly the values set in the GUI -- including min_px,
+    flatten_sigma, and tv_weight, which the export previously ignored or
+    hardcoded. Fallbacks come from the shared DEFAULTS (defaults.py), so the
+    GUI, CLI, and export all start from identical values."""
+    g = lambda k: params.get(k, DEFAULTS[k])
     cal_um, _ = resolve_um(params, params["shape"]) if params.get("shape") else (None, None)
     return argparse.Namespace(
         um_per_px=cal_um, fov=None,
         roi=None, bg=None, clip=None,
-        states=params.get("states", 3),
-        z_neutral=params.get("z_neutral", 0.5),
-        m_threshold=params.get("m_threshold", 0.1),
-        tv_weight=params.get("tv_weight", 0.12),
-        clahe=params.get("clahe", False),
-        tile=params.get("tile", 16),
-        no_rigorous=(not params.get("rigorous", True)),
-        n_boot=params.get("n_boot", 1000),
-        tiff=params.get("tiff", True),
-        dpi=params.get("dpi", 300),
-        connectivity=params.get("connectivity", 1),
+        states=g("states"),
+        z_neutral=g("z_neutral"),
+        m_threshold=g("m_threshold"),
+        tv_weight=g("tv_weight"),
+        flatten_sigma=(g("flatten_sigma") if params.get("flatten", True) else 999.0),
+        min_px=g("min_px"),
+        width_method=g("width_method"),
+        denoise_method=g("denoise_method"),
+        boundary_method=g("boundary_method"),
+        input_mode=g("input_mode"),
+        map_mode=g("map_mode"),
+        fig_format=g("fig_format"),
+        clahe=g("clahe"),
+        tile=g("tile"),
+        no_rigorous=(not params.get("rigorous", DEFAULTS["rigorous"])),
+        n_boot=g("n_boot"),
+        tiff=g("tiff"),
+        detailed=params.get("detailed", DEFAULTS["detailed"]),
+        dpi=g("dpi"),
+        connectivity=g("connectivity"),
     )
 
 
@@ -359,13 +455,10 @@ def run_export(path, params):
     bg_poly = params.get("bg_polygon")
     bg_mask = polygon_to_mask(bg_poly, shape) if bg_poly else None
 
+    # build_args already sets flatten_sigma from the GUI (999.0 when flatten
+    # is off), min_px, tv_weight, etc. -- so the export uses the GUI values.
     args = build_args(params)
-    
-    # --- FIX 1: Safely inject the flatten parameters into the args object ---
-    # This guarantees the core analysis engine gets the 999.0 fallback if disabled
     flatten = params.get("flatten", True)
-    args.flatten_sigma = float(params.get("flatten_sigma", 25.0)) if flatten else 999.0
-    # ------------------------------------------------------------------------
 
     base = params.get("outdir") or os.path.dirname(os.path.abspath(path))
     stem = os.path.splitext(os.path.basename(path))[0]
@@ -387,83 +480,44 @@ def run_export(path, params):
                 except OSError:
                     pass
 
-    res = analyze_with_polygon(path, params)
-    make_distributions_figure(res, os.path.join(outdir, f"{stem}_distributions.png"))
-
-    # per-domain width/area vs. domain-count histograms (svg + tiff), same
-    # min_px the rest of this export used, so the counts agree.
-    paths, _ = make_width_area_count_figure(
-        res["mz"], um_per_px=res["um"], min_px=params.get("min_px", 12),
-        out_stem=os.path.join(outdir, f"{stem}_width_area_counts"),
-        formats=("svg", "tiff"), title=stem,
-    )
-    _drop_json_sidecars(paths)
-
-    # The up/down area fractions (f_+, f_-, f_dw) annotated on the width/period
-    # distribution figures -- the SAME three-state PDF summary.txt reports, so
-    # the figure numbers match the report exactly.
-    pl = res["pdf"]
-    fractions = (pl["p_up"], pl["p_down"], pl["p_zero"])
-
-    # standalone skeleton-pixel width distribution: up/down histograms with
-    # BOTH the log-normal AND Gaussian fits overlaid (compare_gaussian=True,
-    # always -- not gated on the GUI checkbox, which only drives the live
-    # preview panel), plus the f_+/f_-/f_dw fraction annotation.
-    paths, _ = make_width_distribution_figure(
-        res["mz"], um_per_px=res["um"], min_px=params.get("min_px", 12),
-        out_stem=os.path.join(outdir, f"{stem}_width_distribution"),
-        formats=("svg",), title=stem,
-        compare_gaussian=True, fractions=fractions,
-    )
-    _drop_json_sidecars(paths)
-
-    # standalone skeleton-pixel PERIOD distribution -- same treatment as width
-    # above (both fits, fraction annotation), always exported.
-    paths, _ = make_period_distribution_figure(
-        res["mz"], um_per_px=res["um"], min_px=params.get("min_px", 12),
-        out_stem=os.path.join(outdir, f"{stem}_period_distribution"),
-        formats=("svg",), title=stem,
-        compare_gaussian=True, fractions=fractions,
-    )
-    _drop_json_sidecars(paths)
-
-    # standalone Q-Q plots (width AND period vs. fitted log-normal), same
-    # on/off state as the GUI's "Show Q-Q plot" checkbox -- both are
-    # exported together whenever it's ticked, regardless of which one the
-    # live-preview panel is currently showing.
-    if params.get("qq_plot", False):
-        paths, _ = make_qq_plot_figure(
+    # The GUI's distribution / Q-Q / log-normal-vs-Gaussian figures are
+    # DIAGNOSTICS -- written to diagnostics/ only when "detailed" is on (the
+    # default export is statistics.txt + figures/, kept lean).
+    if params.get("detailed", DEFAULTS["detailed"]):
+        # all diagnostic figures follow the chosen figure format (png/eps/pdf);
+        # the multi-format make_*_figure helpers get it as their single format.
+        fext = params.get("fig_format", DEFAULTS["fig_format"])
+        _dg = os.path.join(outdir, "diagnostics"); os.makedirs(_dg, exist_ok=True)
+        _dp = lambda s: os.path.join(_dg, f"{stem}_{s}")
+        res = analyze_with_polygon(path, params)
+        make_distributions_figure(res, _dp(f"distributions.{fext}"))
+        paths, _ = make_width_area_count_figure(
             res["mz"], um_per_px=res["um"], min_px=params.get("min_px", 12),
-            out_stem=os.path.join(outdir, f"{stem}_width_qq"),
-            formats=("svg",), title=stem, quantity="width",
-        )
+            out_stem=_dp("width_area_counts"), formats=(fext,), title=stem)
         _drop_json_sidecars(paths)
-        paths, _ = make_qq_plot_figure(
+        pl = res["pdf"]; fractions = (pl["p_up"], pl["p_down"], pl["p_zero"])
+        paths, _ = make_width_distribution_figure(
             res["mz"], um_per_px=res["um"], min_px=params.get("min_px", 12),
-            out_stem=os.path.join(outdir, f"{stem}_period_qq"),
-            formats=("svg",), title=stem, quantity="period",
-        )
+            out_stem=_dp("width_distribution"), formats=(fext,), title=stem,
+            compare_gaussian=True, fractions=fractions)
         _drop_json_sidecars(paths)
-
-    # OPTIONAL two-panel (a=up, b=down) log-normal-vs-Gaussian comparison --
-    # a density-normalized alternate view of the same comparison the
-    # width/period distribution figures above already show overlaid on one
-    # axes. Redundant with those, so only written when the GUI's "Show
-    # log-normal vs. Gaussian comparison" checkbox is ticked, to keep the
-    # default export folder lean.
-    if params.get("gauss_compare", False):
-        paths, _ = make_lognormal_gaussian_comparison_figure(
+        paths, _ = make_period_distribution_figure(
             res["mz"], um_per_px=res["um"], min_px=params.get("min_px", 12),
-            out_stem=os.path.join(outdir, f"{stem}_width_lognorm_vs_gauss"),
-            formats=("svg",), title=stem, quantity="width",
-        )
+            out_stem=_dp("period_distribution"), formats=(fext,), title=stem,
+            compare_gaussian=True, fractions=fractions)
         _drop_json_sidecars(paths)
-        paths, _ = make_lognormal_gaussian_comparison_figure(
-            res["mz"], um_per_px=res["um"], min_px=params.get("min_px", 12),
-            out_stem=os.path.join(outdir, f"{stem}_period_lognorm_vs_gauss"),
-            formats=("svg",), title=stem, quantity="period",
-        )
-        _drop_json_sidecars(paths)
+        if params.get("qq_plot", False):
+            for q in ("width", "period"):
+                paths, _ = make_qq_plot_figure(
+                    res["mz"], um_per_px=res["um"], min_px=params.get("min_px", 12),
+                    out_stem=_dp(f"{q}_qq"), formats=(fext,), title=stem, quantity=q)
+                _drop_json_sidecars(paths)
+        if params.get("gauss_compare", False):
+            for q in ("width", "period"):
+                paths, _ = make_lognormal_gaussian_comparison_figure(
+                    res["mz"], um_per_px=res["um"], min_px=params.get("min_px", 12),
+                    out_stem=_dp(f"{q}_lognorm_vs_gauss"), formats=(fext,), title=stem, quantity=q)
+                _drop_json_sidecars(paths)
 
     # Domain-count/area/width/period/mz statistics -- previously also
     # written here as export_domain_stats' raw per-domain-area /
@@ -492,14 +546,23 @@ def run_export(path, params):
     # -----------------------------------------------------------
 
     with open(os.path.join(base, "run_info.txt"), "w") as f:
-        f.write(f"run date   : {datetime.datetime.now().isoformat(timespec='seconds')}\n"
-                f"image      : {os.path.basename(path)}\n"
-                f"active area: polygon ({len(poly) if poly else 0} vertices)\n"
-                f"background : {bg_desc}\n"
-                f"calibration: {cal}\n"
-                f"m-threshold: {args.m_threshold}\n"
-                f"tv-weight  : {args.tv_weight}\n"
-                f"states     : {args.states}\n")
+        f.write(f"run date       : {datetime.datetime.now().isoformat(timespec='seconds')}\n"
+                f"image          : {os.path.basename(path)}\n"
+                f"active area    : polygon ({len(poly) if poly else 0} vertices)\n"
+                f"background     : {bg_desc}\n"
+                f"calibration    : {cal}\n"
+                f"m-threshold    : {args.m_threshold}\n"
+                f"input mode     : {getattr(args, 'input_mode', DEFAULTS['input_mode'])}"
+                + (f" ({getattr(args, 'map_mode', DEFAULTS['map_mode'])})\n"
+                   if getattr(args, 'input_mode', 'grayscale') == 'asymmetry_map' else "\n")
+                + f"denoise method : {getattr(args, 'denoise_method', DEFAULTS['denoise_method'])}\n"
+                f"tv-weight      : {args.tv_weight}\n"
+                f"flatten-sigma  : {getattr(args, 'flatten_sigma', DEFAULTS['flatten_sigma'])}\n"
+                f"min domain (px): {getattr(args, 'min_px', DEFAULTS['min_px'])}\n"
+                f"width method   : {getattr(args, 'width_method', DEFAULTS['width_method'])}\n"
+                f"boundary method: {getattr(args, 'boundary_method', DEFAULTS['boundary_method'])}\n"
+                f"detailed figs  : {'yes (diagnostics/)' if params.get('detailed', DEFAULTS['detailed']) else 'no'}\n"
+                f"states         : {args.states}\n")
     return outdir
 
 

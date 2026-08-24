@@ -14,7 +14,8 @@ import numpy as np
 from scipy import ndimage as ndi
 from skimage import filters, morphology, measure, restoration, exposure
 
-from .loaders import load_image, _keep_largest, _remove_small, neighbor_structure
+from .loaders import (load_image, load_asymmetry_map,
+                      _keep_largest, _remove_small, neighbor_structure)
 from .colors import OVERLAY_UP, OVERLAY_DOWN
 
 
@@ -33,6 +34,10 @@ def analyze_xmcd(
     image,
     um_per_px=None,        # calibration; set from the scale bar (TODO per image)
     tv_weight=0.12,        # total-variation denoising strength
+    denoise_method="tv",   # methods/denoise.py: "tv" (default), "nlm", "median", "none"
+    nlm_h=None,            # non-local-means strength (denoise_method="nlm")
+    median_size=3,         # median-filter window (denoise_method="median")
+    background_method=None, # methods/background.py; None -> infer (gaussian / bg_region)
     contrast_window=9,     # px window for the local-contrast ROI detector
     flatten_sigma=25,      # px scale for illumination flattening
     min_roi_px=800,        # discard ROI blobs smaller than this
@@ -47,6 +52,8 @@ def analyze_xmcd(
     bg_mask=None,          # boolean array: arbitrary BACKGROUND region (polygon);
                            #   highest priority, overrides bg_box
     clip=(0.5, 99.5),      # percentile contrast clip at load (hot-pixel robust)
+    input_mode="grayscale",  # "grayscale" (raw XMCD) or "asymmetry_map" (pre-coded)
+    map_mode="rb",         # decode for input_mode="asymmetry_map": "rb" or "bw"
 ):
     """
     Analyze one XMCD-PEEM image.
@@ -64,14 +71,31 @@ def analyze_xmcd(
     Returns (metrics: dict, layers: dict).
     """
     is_path = isinstance(image, (str, bytes)) or hasattr(image, "__fspath__")
-    img = load_image(image, clip=clip) if is_path else np.asarray(image, float)
+    # input_mode="asymmetry_map": the input is an ALREADY-CODED signed map
+    # (blue/red or black/white up/down). Decode it straight to m in [-1,1]
+    # instead of the luminance path (which loses the sign), and use (m+1)/2 as
+    # a grayscale backdrop for the figures. A finished map is already
+    # background-corrected, so flattening is skipped below (is_map branch).
+    is_map = (input_mode == "asymmetry_map")
+    if is_map:
+        m_map = (load_asymmetry_map(image, mode=map_mode, clip=clip) if is_path
+                 else np.clip(np.asarray(image, float), -1.0, 1.0))
+        img = (m_map + 1.0) / 2.0
+    else:
+        img = load_image(image, clip=clip) if is_path else np.asarray(image, float)
 
-    # optional local contrast enhancement -- pulls weak domains out of the gray
-    if clahe:
+    # optional local contrast enhancement -- pulls weak domains out of the gray.
+    # It is a luminance operation; meaningless on a decoded signed map, so skip.
+    if clahe and not is_map:
         img = exposure.equalize_adapthist(img, clip_limit=clahe_clip)
 
     # 1. active area (ROI): polygon mask > manual box > local-contrast auto-detect
-    den = restoration.denoise_tv_chambolle(img, weight=tv_weight)
+    # denoising is a swappable, edge-preserving method (methods/denoise.py):
+    # default "tv" reproduces the original TV-Chambolle behavior exactly. For a
+    # map we denoise the signed field m directly (still centered at 0).
+    from .methods.denoise import denoise as _denoise
+    den = _denoise(m_map if is_map else img, method=denoise_method,
+                   tv_weight=tv_weight, nlm_h=nlm_h, median_size=median_size)
 
     # fast local standard deviation (separable; ~100x faster than generic_filter)
     _m = ndi.uniform_filter(den, size=contrast_window)
@@ -93,24 +117,34 @@ def analyze_xmcd(
 
     # 2. flatten illumination. If a background region is given (polygon mask or
     #    box), use its mean as the magnetic zero; otherwise subtract a
-    #    large-scale Gaussian.
-    if bg_mask is not None:
-        bg = np.asarray(bg_mask, bool)
-        if bg.shape != img.shape:
-            raise ValueError(f"bg_mask shape {bg.shape} != image {img.shape}")
-    elif bg_box is not None:
-        bg = _box_mask(img.shape, bg_box)
-    else:
+    #    large-scale Gaussian. For a pre-coded asymmetry map the field is
+    #    ALREADY background-corrected and centered at 0, so flattening is
+    #    skipped entirely (den is the signed field, used as `flat` directly).
+    if is_map:
         bg = None
-
-    if bg is not None and bg.any():
-        flat = den - float(den[bg].mean())
+        flat = den
     else:
-        flat = den - ndi.gaussian_filter(den, sigma=flatten_sigma)
+        if bg_mask is not None:
+            bg = np.asarray(bg_mask, bool)
+            if bg.shape != img.shape:
+                raise ValueError(f"bg_mask shape {bg.shape} != image {img.shape}")
+        elif bg_box is not None:
+            bg = _box_mask(img.shape, bg_box)
+        else:
+            bg = None
+
+        # background correction is a swappable method (methods/background.py).
+        # method=None infers the original behavior (bg_region when a bg region
+        # is given, else gaussian), so default results are unchanged.
+        from .methods.background import subtract_background as _subtract_bg
+        flat = _subtract_bg(den, roi=roi,
+                            bg_mask=(bg if (bg is not None and bg.any()) else None),
+                            method=background_method, flatten_sigma=flatten_sigma)
 
     # 3. up / down classification.
-    #    With a background zero, threshold symmetrically about 0; otherwise Otsu.
-    if bg is not None and bg.any():
+    #    A map (centered at 0) or a background zero -> threshold symmetrically
+    #    about 0; otherwise Otsu on the flattened contrast.
+    if is_map or (bg is not None and bg.any()):
         up = roi & (flat > 0)
         down = roi & (flat <= 0)
     else:

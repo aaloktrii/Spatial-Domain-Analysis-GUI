@@ -34,6 +34,7 @@ from matplotlib.widgets import PolygonSelector, RectangleSelector, EllipseSelect
 
 from PIL import Image
 import gui_core as core
+from defaults import DEFAULTS
 from xmcd_toolkit import COLOR_UP, COLOR_DOWN, CMAP3_HEX
 
 try:
@@ -69,7 +70,10 @@ class _ToolTip:
         except Exception:
             pass
         self.tip.wm_geometry(f"+{x}+{y}")
-        tk.Label(self.tip, text=self.text, justify="left", background="#ffffe0",
+        # explicit foreground: on macOS dark mode tk.Label defaults to light
+        # text, which is invisible on the pale-yellow tooltip background.
+        tk.Label(self.tip, text=self.text, justify="left",
+                background="#ffffe0", foreground="#111111",
                 relief="solid", borderwidth=1, wraplength=self.wraplength,
                 font=("", 9)).pack(ipadx=5, ipady=3)
 
@@ -145,8 +149,42 @@ class App:
         # control stack, and never drawn over the image.
         results_col = ttk.Frame(main)
         results_col.pack(side="left", fill="y", padx=(0, 8))
-        results_box = ttk.LabelFrame(results_col, text="Results", padding=6)
+        results_box = ttk.LabelFrame(results_col, text="", padding=6)
         results_box.pack(fill="both", expand=True)
+        # hover-help header explaining the correlation length (and how it
+        # relates to the other readout quantities), since xi is the robust
+        # domain-size measure now shown in the readout below.
+        _xi_help = (
+            "Correlation length ξ (domain size)\n"
+            "\n"
+            "ξ is the distance over which the magnetization stays "
+            "correlated -- i.e. the characteristic SIZE of a domain. It is "
+            "the lag at which the 2-D spatial autocorrelation of a state's "
+            "map falls to 1/e.\n"
+            "\n"
+            "Computed by FFT autocorrelation of the up (or down) region -- "
+            "NO threshold on a continuous field and NO skeleton -- so it is "
+            "far more robust to the denoising (tv_weight) and m-threshold "
+            "choice than the skeleton width (ξ drifts ~10% across "
+            "tv_weight; the skeleton width drifts 2-3x). Report ξ as the "
+            "characteristic domain scale; treat the skeleton width as a "
+            "tv-tagged local-thickness measure.\n"
+            "\n"
+            "xi_up vs xi_down are the up/down domain sizes: equal ⇒ "
+            "balanced (demagnetized); unequal ⇒ the majority (net-"
+            "magnetized) state has the larger domains -- an independent "
+            "structural check on the net-magnetization direction."
+        )
+        _hdr = ttk.Label(results_col, text="  what is ξ (corr. length)?  (?)",
+                         foreground="#06c", cursor="question_arrow")
+        _hdr.pack(anchor="w", before=results_box)
+        _ToolTip(_hdr, _xi_help, wraplength=360)
+        # "Results (?)" title row with the copyright tooltip, above everything.
+        _rhdr = ttk.Frame(results_col); _rhdr.pack(anchor="w", before=_hdr)
+        ttk.Label(_rhdr, text="Results", font=("", 11, "bold")).pack(side="left")
+        _rq = ttk.Label(_rhdr, text=" (?)", foreground="#06c", cursor="question_arrow")
+        _rq.pack(side="left")
+        _ToolTip(_rq, "© Aalok Tiwari")
         # plain tk.Label (not ttk): ttk styling ignores bg/fg on macOS, where
         # the themed default can render dark and swallow the text. Explicit
         # white background + near-black text keeps it readable in both light
@@ -170,7 +208,20 @@ class App:
                 self.drop.dnd_bind("<<Drop>>", self._on_drop)
             except Exception:
                 pass
-        ttk.Button(left, text="Browse image...", command=self._browse).pack(fill="x")
+        _brow = ttk.Frame(left); _brow.pack(fill="x")
+        ttk.Button(_brow, text="Browse image...", command=self._browse).pack(
+            side="left", fill="x", expand=True)
+        _bq = ttk.Label(_brow, text=" (?)", foreground="#06c", cursor="question_arrow")
+        _bq.pack(side="left")
+        _ToolTip(_bq,
+                 "Accepted image formats\n\n"
+                 "Any single image PIL can read: PNG, TIFF/TIF (8-bit, 16-bit, "
+                 "and float), JPG/JPEG, BMP. 16-bit / float TIFFs are read at "
+                 "full depth. For colour PNG/JPG screenshots, acquisition-"
+                 "software chrome (title bar, labels) is auto-cropped by "
+                 "keeping the largest near-grayscale region.\n\n"
+                 "Not supported: multi-frame stacks, PDFs, .npy arrays, or "
+                 "raw x,y,mz text (use the library loader for text).")
         self.file_lbl = ttk.Label(left, text="(no file)", wraplength=230, foreground="#555")
         self.file_lbl.pack(pady=(2, 6))
 
@@ -184,6 +235,35 @@ class App:
         r = ttk.Frame(a); r.pack(fill="x", pady=1)
         ttk.Button(r, text="Save polygon...", command=self._save_poly).pack(side="left", expand=True, fill="x", padx=(0, 2))
         ttk.Button(r, text="Load polygon...", command=self._load_poly).pack(side="left", expand=True, fill="x")
+
+        # publication figure format for the export (png / eps / pdf)
+        self._FIGFMT_CHOICES = [("PNG (raster)", "png"),
+                                ("EPS (vector, journals)", "eps"),
+                                ("PDF (vector)", "pdf")]
+        _ff_disp = {v: d for d, v in self._FIGFMT_CHOICES}
+        _ffrow = ttk.Frame(left); _ffrow.pack(fill="x", pady=(8, 0))
+        ttk.Label(_ffrow, text="Figure format", width=13).pack(side="left")
+        self.fig_format_var = tk.StringVar(value=_ff_disp[DEFAULTS["fig_format"]])
+        _ffc = ttk.Combobox(_ffrow, textvariable=self.fig_format_var, state="readonly",
+                            values=[d for d, _v in self._FIGFMT_CHOICES])
+        _ffc.pack(side="left", fill="x", expand=True, padx=(4, 0))
+        _ToolTip(_ffc,
+                 "Format of the publication images in figures/ (and the\n"
+                 "12-panel pipeline). EPS/PDF are vector for journal submission\n"
+                 "-- image data is rasterized inside, text/boundary lines stay\n"
+                 "vector. PNG is smaller for quick viewing.")
+
+        self.detailed_var = tk.BooleanVar(value=DEFAULTS["detailed"])
+        _dchk = ttk.Checkbutton(
+            left, text="Detailed figures (diagnostics/)",
+            variable=self.detailed_var)
+        _dchk.pack(anchor="w", pady=(6, 0))
+        _ToolTip(_dchk,
+                 "Off (default): export writes statistics.txt + the clean\n"
+                 "publication images in figures/.\n"
+                 "On: also writes a diagnostics/ folder -- the 12-panel\n"
+                 "step-by-step pipeline, width-method comparison, size/fit\n"
+                 "distributions, fits.txt, and (if TIFF on) publication TIFFs.")
 
         ttk.Button(left, text="Export all files", command=self._export).pack(fill="x", pady=(4, 0))
         self.status = ttk.Label(left, text="load an image to begin",
@@ -313,6 +393,48 @@ class App:
     # ------------------------------------------------------------------
 
     def _build_controls(self, parent):
+        # --- INPUT TYPE: raw grayscale XMCD vs. an already-coded signed map ---
+        inp = ttk.LabelFrame(parent, text="Input", padding=6); inp.pack(fill="x")
+        self._INPUT_CHOICES = [("Grayscale XMCD (raw)", "grayscale"),
+                               ("Asymmetry map (pre-coded)", "asymmetry_map")]
+        self._MAP_CHOICES = [("blue +1 / red −1 (RB)", "rb"),
+                             ("white +1 / black −1 (BW)", "bw")]
+        _inp_disp = {v: d for d, v in self._INPUT_CHOICES}
+        _map_disp = {v: d for d, v in self._MAP_CHOICES}
+        _help_row(
+            inp, "Input type:",
+            "Grayscale XMCD = raw PEEM intensity; the pipeline flattens the "
+            "illumination and derives the asymmetry itself.\n"
+            "Asymmetry map = an ALREADY-coloured signed map (blue/red or "
+            "black/white up/down). It is decoded straight to m in [-1,1] and "
+            "flattening/background subtraction are skipped (the map is already "
+            "background-corrected). Pick the colour scheme below.",
+        )
+        self.input_mode_var = tk.StringVar(value=_inp_disp[DEFAULTS["input_mode"]])
+        _ic = ttk.Combobox(inp, textvariable=self.input_mode_var, state="readonly",
+                           values=[d for d, _v in self._INPUT_CHOICES])
+        _ic.pack(fill="x", padx=5)
+        self._map_row = ttk.Frame(inp)
+        ttk.Label(self._map_row, text="colour scheme", width=13).pack(side="left")
+        self.map_mode_var = tk.StringVar(value=_map_disp[DEFAULTS["map_mode"]])
+        _mc = ttk.Combobox(self._map_row, textvariable=self.map_mode_var, state="readonly",
+                           values=[d for d, _v in self._MAP_CHOICES])
+        _mc.pack(side="left", fill="x", expand=True, padx=(4, 0))
+        _mc.bind("<<ComboboxSelected>>", lambda _ev: self._repreview())
+
+        def _map_row_visibility():
+            # colour-scheme row only matters for a pre-coded map
+            if dict(self._INPUT_CHOICES)[self.input_mode_var.get()] == "asymmetry_map":
+                self._map_row.pack(fill="x", padx=5, pady=(4, 0))
+            else:
+                self._map_row.pack_forget()
+
+        def _on_input_mode(_ev=None):
+            _map_row_visibility()
+            self._repreview()
+        _ic.bind("<<ComboboxSelected>>", _on_input_mode)
+        _map_row_visibility()   # initial visibility only (no repreview yet)
+
         sh = ttk.LabelFrame(parent, text="Selection", padding=6); sh.pack(fill="x")
         r = ttk.Frame(sh); r.pack(fill="x")
         ttk.Label(r, text="draw", width=6).pack(side="left")
@@ -376,6 +498,25 @@ class App:
         # cached step -- changing it forces a full recompute, not the fast
         # threshold-only preview path) ---
         d = ttk.LabelFrame(parent, text="Denoising", padding=6); d.pack(fill="x", pady=4)
+        # Denoiser method (registry-driven: options come from
+        # methods/denoise.py, so adding a denoiser needs no GUI change).
+        from xmcd_toolkit import denoise_methods as _dn
+        self._DENOISE_CHOICES = [(m.name, m.label) for m in _dn.DENOISERS.values()]
+        _help_row(
+            d, "Denoiser:",
+            "Which edge-preserving denoiser runs before classification. TV is "
+            "the default; NLM (non-local means) is the alternative used by "
+            "recent FGT/STXM domain papers and often gives a flatter "
+            "width-vs-denoising response. The strength slider below drives "
+            "both. Changing this re-runs the full denoise.",
+            pady=(0, 2),
+        )
+        _dn_disp = {n: l for n, l in self._DENOISE_CHOICES}
+        self.denoise_method_var = tk.StringVar(value=_dn_disp[DEFAULTS["denoise_method"]])
+        _dnc = ttk.Combobox(d, textvariable=self.denoise_method_var, state="readonly",
+                            values=[l for _n, l in self._DENOISE_CHOICES])
+        _dnc.pack(fill="x", padx=5, pady=(0, 4))
+        _dnc.bind("<<ComboboxSelected>>", lambda _ev: self._repreview())
         _help_row(
             d, "TV denoise weight (tv_weight):",
             "Total-variation smoothing applied to the raw image before "
@@ -386,7 +527,7 @@ class App:
             "domains. Typical range: ~0.1 for clean screenshots/simulations, "
             "~0.6-1.0 for noisy experimental frames (e.g. 0 mA).",
         )
-        self.tv_weight_var = tk.DoubleVar(value=0.1)
+        self.tv_weight_var = tk.DoubleVar(value=DEFAULTS['tv_weight'])
         self.tv_weight_slider = ttk.Scale(
             d, from_=0.02, to=1.5, orient="horizontal",
             variable=self.tv_weight_var,
@@ -419,7 +560,7 @@ class App:
             "up/down speckle instead. Default 0.05; noisy frames often look "
             "cleaner around 0.03-0.06 once tv_weight is also turned up.",
         )
-        self.m_thresh_var = tk.DoubleVar(value=0.05)
+        self.m_thresh_var = tk.DoubleVar(value=DEFAULTS['m_threshold'])
         self.m_thresh = ttk.Scale(g, from_=0.0, to=0.8, orient="horizontal",
                                   variable=self.m_thresh_var,
                                   command=lambda _: self._repreview())
@@ -444,7 +585,7 @@ class App:
             "reasonable; too high and it starts eating real small domains.",
             pady=(10, 0),
         )
-        self.min_px_var = tk.IntVar(value=40)
+        self.min_px_var = tk.IntVar(value=DEFAULTS['min_px'])
         self.min_px_slider = ttk.Scale(
             g,
             from_=1,
@@ -454,13 +595,33 @@ class App:
             command=lambda _: self._repreview()
         )
         self.min_px_slider.pack(fill="x", padx=5)
-        self.min_px_label = ttk.Label(g, text="40 px")
+        self.min_px_label = ttk.Label(g, text=f"{DEFAULTS['min_px']} px")
         self.min_px_label.pack(anchor="w")
-        
+
         def _update_min_px_label(*args):
             self.min_px_label.config(text=f"{self.min_px_var.get()} px")
         self.min_px_var.trace_add("write", _update_min_px_label)
-        
+
+        # Flatten sigma (background scale). Image-dependent: the default suits
+        # wide-field device frames; raise it (~150) for zoomed large-domain
+        # frames so the Gaussian background stays SMOOTHER than the domains
+        # (otherwise it tracks them and hollows their interiors). Entry (not a
+        # slider) since it re-runs the expensive denoise/flatten on change.
+        _help_row(
+            g, "Flatten sigma (px):",
+            "Scale of the Gaussian background that is subtracted to remove "
+            "illumination. It must be LARGER than your domains, or it will "
+            "follow the domains and hollow out their interiors (leaving only "
+            "walls -- widths collapse). Default suits standard device frames; "
+            "for a zoomed / large-domain field of view raise it to ~150-250. "
+            "Press Enter to apply.",
+            pady=(10, 0),
+        )
+        self.flatten_sigma_var = tk.DoubleVar(value=DEFAULTS['flatten_sigma'])
+        _fs_entry = ttk.Entry(g, textvariable=self.flatten_sigma_var, width=8)
+        _fs_entry.pack(anchor="w", padx=5)
+        _fs_entry.bind("<Return>", lambda ev: self._repreview())
+
         # Connectivities
         _help_row(
             g, "Connectivity rule:",
@@ -474,12 +635,64 @@ class App:
             "claim the same boundary.",
             pady=(10, 0),
         )
-        self.conn_var = tk.IntVar(value=1)
+        self.conn_var = tk.IntVar(value=DEFAULTS['connectivity'])
         c_frame = ttk.Frame(g); c_frame.pack(fill="x")
         ttk.Radiobutton(c_frame, text="4-way", variable=self.conn_var, value=1,
                         command=self._repreview).pack(side="left", padx=(0, 10))
         ttk.Radiobutton(c_frame, text="8-way", variable=self.conn_var, value=2,
                         command=self._repreview).pack(side="left")
+
+        # Width method: which estimator gives the reported w+/w-. All methods
+        # are always shown in the readout for comparison; this picks the
+        # primary one. Default 2*Area/Perimeter (agrees with skeleton-mean,
+        # no neck bias). See the exported width_comparison figure.
+        _help_row(
+            g, "Width method:",
+            "How the reported domain width w+/w- is computed. 2*Area/Perimeter "
+            "and skeleton-mean are direct local widths and usually agree; "
+            "skeleton-median reads ~30% low (thin-neck bias); correlation "
+            "length xi is a robust domain SIZE (~1.5x the width), not the "
+            "width itself. The readout always lists all four so you can "
+            "compare on your data.",
+            pady=(10, 0),
+        )
+        # display label -> method key
+        self._WIDTH_CHOICES = [
+            ("2*Area/Perimeter (recommended)", "perimeter_area"),
+            ("skeleton mean", "skeleton_mean"),
+            ("skeleton median", "skeleton_median"),
+            ("correlation length xi", "correlation_length"),
+        ]
+        _disp_by_key = {k: d for d, k in self._WIDTH_CHOICES}
+        self.width_method_var = tk.StringVar(value=_disp_by_key[DEFAULTS["width_method"]])
+        wm = ttk.Combobox(g, textvariable=self.width_method_var, state="readonly",
+                          values=[d for d, _ in self._WIDTH_CHOICES])
+        wm.pack(fill="x", padx=5)
+        wm.bind("<<ComboboxSelected>>", lambda _ev: self._repreview())
+
+        # Boundary method: which domain-boundary line is overlaid on the image
+        # (registry-driven from methods/boundary.py).
+        from xmcd_toolkit import boundary_methods as _bd
+        self._BOUNDARY_CHOICES = [(m.name, m.label) for m in _bd.BOUNDARIES.values()]
+        _help_row(
+            g, "Boundary (overlay):",
+            "Which up/down boundary line is drawn on the image. m=0 sub-pixel "
+            "contour is a sharp threshold-free line (follows fine detail and "
+            "some noise); threshold band shows the |m|<=t neutral zone; "
+            "Chan-Vese is a smooth, noise-robust region interface (slower). "
+            "This only draws the overlay -- it does not change f+/f- or width.",
+            pady=(10, 0),
+        )
+        _bd_disp = {n: l for n, l in self._BOUNDARY_CHOICES}
+        self.boundary_method_var = tk.StringVar(value=_bd_disp[DEFAULTS["boundary_method"]])
+        self.show_boundary_var = tk.BooleanVar(value=False)
+        _bframe = ttk.Frame(g); _bframe.pack(fill="x", padx=5)
+        ttk.Checkbutton(_bframe, text="show", variable=self.show_boundary_var,
+                        command=self._repreview).pack(side="left")
+        _bc = ttk.Combobox(_bframe, textvariable=self.boundary_method_var, state="readonly",
+                           values=[l for _n, l in self._BOUNDARY_CHOICES])
+        _bc.pack(side="left", fill="x", expand=True, padx=(6, 0))
+        _bc.bind("<<ComboboxSelected>>", lambda _ev: self._repreview())
         # Q-Q plot / Gaussian-comparison toggles live in
         # _build_dist_toggles_panel(), bottom-center of the plot area --
         # not here, so they aren't duplicated.
@@ -494,14 +707,26 @@ class App:
             "tv_weight": float(self.tv_weight_var.get()),
             "min_px": int(self.min_px_var.get()),
             "connectivity": int(self.conn_var.get()),
+            "width_method": dict((d, k) for d, k in self._WIDTH_CHOICES)[
+                self.width_method_var.get()],
+            "denoise_method": dict((l, n) for n, l in self._DENOISE_CHOICES)[
+                self.denoise_method_var.get()],
+            "boundary_method": dict((l, n) for n, l in self._BOUNDARY_CHOICES)[
+                self.boundary_method_var.get()],
+            "input_mode": dict(self._INPUT_CHOICES)[self.input_mode_var.get()],
+            "map_mode": dict(self._MAP_CHOICES)[self.map_mode_var.get()],
+            "show_boundary": bool(self.show_boundary_var.get()),
+            "fig_format": dict(self._FIGFMT_CHOICES)[self.fig_format_var.get()],
             "qq_plot": bool(self.qq_var.get()),
             "gauss_compare": bool(self.gauss_var.get()),
             "dist_quantity": self.dist_quantity_var.get(),
-            "states": 3, "z_neutral": 0.5,
-            "clahe": False,
-            "flatten": True, "flatten_sigma": 25.0,
-            "rigorous": True, "tiff": True, "n_boot": 1000,
-            "dpi": 300, "outdir": None,
+            "states": DEFAULTS["states"], "z_neutral": DEFAULTS["z_neutral"],
+            "clahe": DEFAULTS["clahe"],
+            "flatten": True, "flatten_sigma": float(self.flatten_sigma_var.get()),
+            "rigorous": DEFAULTS["rigorous"], "tiff": DEFAULTS["tiff"],
+            "detailed": bool(self.detailed_var.get()),
+            "n_boot": DEFAULTS["n_boot"],
+            "dpi": DEFAULTS["dpi"], "outdir": None,
             "shape": (self.img.shape if self.img is not None else None),
         }
 
@@ -910,6 +1135,12 @@ class App:
             if messagebox.askyesno("Done", f"Saved to:\n{payload}\n\nOpen folder?"):
                 self._open(payload)
 
+    def _redraw_only(self):
+        """Redraw the last result without recomputing -- for toggling the
+        boundary overlay on/off (no need to re-run the analysis)."""
+        if self.res is not None:
+            self._draw_preview(self.res)
+
     def _draw_preview(self, res):
         self.ax_img.clear(); self.ax_img.axis("off")
         self.ax_img.imshow(self.img, cmap="gray")
@@ -923,9 +1154,21 @@ class App:
             xs = [p[0] for p in self.bg_poly] + [self.bg_poly[0][0]]
             ys = [p[1] for p in self.bg_poly] + [self.bg_poly[0][1]]
             self.ax_img.plot(xs, ys, "--", color="#e69500", lw=1.5)
+        # optional domain-boundary overlay (the "show" checkbox); contours as
+        # thin cyan lines, edge masks as cyan points.
+        if self.show_boundary_var.get() and res.get("boundary"):
+            b = res["boundary"]
+            if b.get("contours"):
+                for c in b["contours"]:
+                    self.ax_img.plot(c[:, 1], c[:, 0], color="#00e5ff", lw=0.6)
+            elif b.get("edge") is not None:
+                ys2, xs2 = np.where(b["edge"])
+                self.ax_img.plot(xs2, ys2, ".", color="#00e5ff", ms=0.5)
         ttl = "three-state $m_z$ inside active area"
         if self.bg_poly:
             ttl += " (bg = amber dashed -> zero)"
+        if self.show_boundary_var.get():
+            ttl += "  (boundary = cyan)"
         self.ax_img.set_title(ttl)
         self.ax_img.legend(handles=[
             Patch(facecolor=COLOR_UP, label="up (+1)"),

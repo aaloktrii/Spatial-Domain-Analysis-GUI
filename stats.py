@@ -234,6 +234,73 @@ def number_density_local(mz, tile=16, region=None):
 
 
 # ----------------------------------------------------------------------
+def domain_wall_distribution(nd):
+    """
+    Distribution of the LOCAL domain-wall fraction D across the flake, from a
+    number_density_local() result. D is the zero/neutral state fraction in
+    each tile (nd["n_zero"]); its scalar frame value is one number, but its
+    SPATIAL distribution over tiles reveals whether walls are uniform or
+    clustered/pinned -- fragmentation heterogeneity.
+
+    Returns {"values": per-tile D array, "n_tiles", "mean", "median", "std",
+             "min", "max"} (empty/NaN if no flake tiles).
+    """
+    vals = np.array([t["n_zero"] for t in nd["tiles"]], float)
+    if vals.size == 0:
+        return {"values": vals, "n_tiles": 0, "mean": float("nan"),
+                "median": float("nan"), "std": float("nan"),
+                "min": float("nan"), "max": float("nan")}
+    return {"values": vals, "n_tiles": int(vals.size),
+            "mean": float(vals.mean()), "median": float(np.median(vals)),
+            "std": float(vals.std()), "min": float(vals.min()),
+            "max": float(vals.max())}
+
+
+def make_domain_wall_figure(img, roi, nd, out_png, title="", tile=None):
+    """
+    Two-panel figure of the local domain-wall fraction D:
+      (a) spatial map of D (nd["n_zero"]) over the flake image, and
+      (b) histogram of the per-tile D values (its spatial distribution).
+    Returns (out_png, domain_wall_distribution(nd) dict).
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    dist = domain_wall_distribution(nd)
+    tile = tile if tile is not None else nd.get("tile")
+    fig, ax = plt.subplots(1, 2, figsize=(11, 4.4))
+
+    ax[0].imshow(img, cmap="gray")
+    # upsample the per-tile map to image extent so it overlays the frame
+    Dmap = nd["n_zero"]
+    im = ax[0].imshow(Dmap, cmap="magma", vmin=0, vmax=1, alpha=0.85,
+                      extent=[0, img.shape[1], img.shape[0], 0],
+                      interpolation="nearest")
+    ax[0].set_title(f"(a) local domain-wall fraction D  (tile={tile}px)")
+    ax[0].axis("off")
+    fig.colorbar(im, ax=ax[0], fraction=0.046, pad=0.04, label="D")
+
+    if dist["n_tiles"]:
+        ax[1].hist(dist["values"], bins=24, color="#8a4fa0", edgecolor="white", alpha=0.9)
+        ax[1].axvline(dist["median"], color="k", ls="--", lw=1.4,
+                      label=f"median={dist['median']:.3f}")
+        ax[1].axvline(dist["mean"], color="#b23a3a", ls=":", lw=1.4,
+                      label=f"mean={dist['mean']:.3f}")
+        ax[1].legend(fontsize=9)
+    ax[1].set_xlabel("local domain-wall fraction D (per tile)")
+    ax[1].set_ylabel("number of tiles")
+    ax[1].set_title(f"(b) spatial distribution of D  (n={dist['n_tiles']} tiles, "
+                    f"SD={dist['std']:.3f})")
+
+    if title:
+        fig.suptitle(title, fontsize=12)
+    plt.tight_layout(rect=[0, 0, 1, 0.95] if title else None)
+    plt.savefig(out_png, dpi=130); plt.close(fig)
+    return out_png, dist
+
+
+# ----------------------------------------------------------------------
 def net_change_mz(mz_before, mz_after, region=None):
     """
     Net change in magnetization between two conditions (e.g. two pulses):
