@@ -4,12 +4,12 @@
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22087856.svg)](https://doi.org/10.5281/zenodo.22087856)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Quantitative analysis and comparison of magnetic domains in XMCD-PEEM images.
+Quantitative analysis and comparison of magnetic domains in X-PEEM images (XMCD and XLD).
 This toolkit is part of a broader general-purpose framework for N-dimensional spectroscopic analysis
 ([TensorSpec](https://github.com/fawkesdx/TensorSpec)).
 
-The toolkit turns an XMCD asymmetry map into up / neutral / down domains and measures them: area fractions and
-⟨m_z⟩, domain counts, sizes, widths, periods and walls, with correlation-corrected statistics. Two images (for
+The toolkit turns an X-ray dichroism (XMCD or XLD) asymmetry map into +ve / neutral / −ve domains and measures them: area
+fractions and the order parameter (⟨m⟩ or ⟨v_N⟩), domain counts, sizes, widths, periods and walls, with correlation-corrected statistics. Two images (for
 example before and after a current pulse) can be aligned and compared pixel by pixel: which domains switched, how
 much of the pattern is remembered, and how the populations changed.
 
@@ -22,12 +22,20 @@ It can be used three ways: a **graphical program**, **command-line tools** for b
 - **Three-state classification** with a neutral band m₀, inside a drawn active area; the zero from a background
   region or a Sym ± centre (0 / median / mean); the scale from the active area only, so defects elsewhere do not
   distort it.
-- **Domain statistics** – ⟨m_z⟩ discrete and continuous, with and without m₀; pixel counts; domain counts and areas;
+- **Domain statistics** – ⟨m⟩ (XMCD) or ⟨v_N⟩ (XLD), discrete and continuous, with and without m₀; pixel counts; domain counts and areas;
   widths (four methods), periods, wall density; log-normal / Gaussian fits; block-bootstrap confidence intervals.
 - **Comparison of two states** – alignment (automatic or from point pairs, checked by correlation vs shift), flip
   map, switched fractions, memory r, local memory, wall shift, population changes.
 - **Publication output** – figures (vector PDF / EPS or PNG, Illustrator-safe), TIFF panels, CSV tables, sessions.
 - **Large images** – 40-megapixel frames stay responsive (analysis on request, screen-resolution drawing).
+
+## XMCD and XLD
+
+The analysis works on any signed dichroism map and computes the same numbers for both. The two states are called
+**+ve** and **−ve** (with 0 the neutral band); what they mean physically is for the user to interpret: the two magnetization
+directions (out-of-plane or in-plane) for **XMCD**, or the two axis populations for **XLD** (XMLD + XNLD, e.g. antiferromagnets). The
+order parameter is written **⟨m⟩** for XMCD and **⟨v_N⟩** (Néel vector) for XLD: one click per image
+(*Dichroism*, step 1). See [docs/methods.md](docs/methods.md), section 2.
 
 ## Installation
 
@@ -68,7 +76,7 @@ Each command has `--help`. `sda-analyze` writes next to each image (`<image>_ana
 from xmcd_toolkit import analyze_xmcd, three_state_field, pdf_three_state
 
 metrics, layers = analyze_xmcd("map.png", input_mode="asymmetry_map", map_mode="auto", um_per_px=0.02)
-mz, roi = three_state_field(layers, m_threshold=0.1)        # +1 up, 0 neutral, -1 down
+mz, roi = three_state_field(layers, m_threshold=0.1)        # +1 +ve, 0 neutral, -1 −ve
 p = pdf_three_state(mz, region=roi)
 print(p["p_up"], p["p_zero"], p["p_down"])
 ```

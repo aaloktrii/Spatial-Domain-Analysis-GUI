@@ -10,6 +10,10 @@ Pipeline:
      domain-wall length and density (fragmentation metric)
 """
 
+import contextlib
+import io
+
+from ..notation import relabel
 import numpy as np
 from scipy import ndimage as ndi
 from skimage import filters, morphology, exposure
@@ -210,8 +214,16 @@ def analyze_xmcd(
 
 
 def print_report(metrics):
+    """Print the report (state names +ve / -ve, see notation.py)."""
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        _print_report(metrics)
+    print(relabel(buf.getvalue()), end="")
+
+
+def _print_report(metrics):
     m = metrics
-    print("=" * 56); print("  XMCD-PEEM DOMAIN ANALYSIS"); print("=" * 56)
+    print("=" * 56); print("  X-PEEM DOMAIN ANALYSIS"); print("=" * 56)
     print(f"  calibrated ............. {'yes' if m['calibrated'] else 'NO (pixels only)'}")
     if m["calibrated"]:
         print(f"  scale .................. {m['um_per_px']:.4f} um/px")

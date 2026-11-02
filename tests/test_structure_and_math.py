@@ -261,3 +261,23 @@ def test_calibrated_widths_with_an_empty_state():
     mz[5:30, 5:30] = 1                       # only up domains, no down
     mm = per_state_morphometry(mz, um_per_px=0.02)
     assert np.isnan(mm["down"]["width_median_nm"]) and mm["up"]["width_median_nm"] > 0
+
+
+def test_state_names():
+    """States +ve / -ve for XMCD and XLD alike; order parameter <m> (XMCD) or <v_N> (XLD); other words untouched."""
+    from xmcd_toolkit.notation import relabel
+    assert relabel("up → down (% of up)") == "+ve → −ve (% of +ve)"
+    assert relabel("P(up/0/dn) Δf↑ Δf↓ ⟨m_z⟩", "XMCD") == "P(+ve/0/−ve) Δf₊ Δf₋ ⟨m⟩"
+    assert relabel("Δ⟨m_z⟩ m_z(m_0)", "XLD") == "Δ⟨v_N⟩ v_N(m_0)"
+    assert relabel("upper bound, period, group") == "upper bound, period, group"
+
+
+def test_outputs_use_pos_neg_names():
+    """Column names and JSON keys say pos / neg; text says +ve / -ve; the dichroism of a block sets <m> / <v_N>."""
+    from xmcd_toolkit.notation import column, keys, relabel, using
+    assert column("frac_up") == "frac_pos" and column("n_domains_down") == "n_domains_neg"
+    assert column("p_zero") == "p_zero" and column("group_id") == "group_id"
+    assert keys({"up": {"width_dn": 1}}) == {"pos": {"width_neg": 1}}
+    with using("XLD"):
+        assert relabel("net <m_z>") == "net <v_N>"
+    assert relabel("net <m_z>") == "net <m>"

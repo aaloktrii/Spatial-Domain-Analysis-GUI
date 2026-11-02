@@ -1,4 +1,5 @@
 """Figures for core/magnetization.py (plotting layer, no analysis)."""
+from .labels import relabel_figure
 import numpy as np
 from scipy import optimize, stats
 from ..colors import COLOR_UP, COLOR_DOWN
@@ -66,6 +67,7 @@ def make_xi_map_figure(layers, out_png, um_per_px=None, title=""):
     if title:
         fig.suptitle(title, fontsize=12)
     plt.tight_layout(rect=[0, 0, 1, 0.95] if title else None)
+    relabel_figure(plt.gcf())
     plt.savefig(out_png, dpi=130); plt.close(fig)
     return out_png, stats_d
 
@@ -116,5 +118,6 @@ def make_magnetization_figure(res, out_png, title=""):
     if title:
         fig.suptitle(title, fontsize=13)
     plt.tight_layout(rect=[0, 0, 1, 0.97])
+    relabel_figure(plt.gcf())
     plt.savefig(out_png, dpi=130); plt.close(fig)
     return out_png

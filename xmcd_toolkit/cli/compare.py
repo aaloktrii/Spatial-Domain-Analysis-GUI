@@ -1,6 +1,8 @@
 """sda-compare -- test whether a current pulse changed the magnetization.
 
 Command line (thin layer over services/ and core/)."""
+from ..notation import relabel
+from ..plotting.labels import relabel_figure
 import os
 import sys
 import re
@@ -84,7 +86,7 @@ def main():
         "",
         f"VERDICT: {verdict}",
     ]
-    report = "\n".join(lines)
+    report = relabel("\n".join(lines))
     print(report)
     with open(os.path.join(outdir, "comparison.txt"), "w") as f:
         f.write(report + "\n")
@@ -111,6 +113,7 @@ def main():
     fig.suptitle(f"{lb}  ->  {la}", fontsize=13)
     plt.tight_layout(rect=[0, 0, 1, 0.95])
     fig_path = os.path.join(outdir, "comparison.png")
+    relabel_figure(plt.gcf())
     plt.savefig(fig_path, dpi=130); plt.close(fig)
     print(f"\nwrote {outdir}/comparison.png and comparison.txt")
 

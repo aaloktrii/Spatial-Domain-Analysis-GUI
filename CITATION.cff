@@ -11,13 +11,16 @@ date-released: "2026-11-01"
 license: MIT
 repository-code: "https://github.com/aaloktrii/Spatial-Domain-Analysis-GUI"
 keywords:
+  - X-PEEM
   - XMCD
+  - XLD
+  - XMLD
   - PEEM
   - magnetic domains
   - image analysis
 abstract: >-
   Quantitative analysis and pixel-by-pixel comparison of magnetic domains in
-  XMCD-PEEM images: three-state classification, domain statistics and
+  X-PEEM images (XMCD and XLD): three-state classification, domain statistics and
   morphometry, alignment of image pairs, and switching and population changes.
 doi: "10.5281/zenodo.22087856"
 identifiers:

@@ -7,6 +7,7 @@ Deliberately minimal: no scale bars, one panel per file (plus the montage),
 saved to whatever paths the caller gives. Diagnostic/multi-panel figures
 (the step-by-step pipeline, method comparisons, fits) live elsewhere.
 """
+from .labels import relabel_figure
 import numpy as np
 import matplotlib
 matplotlib.use("Agg")
@@ -28,6 +29,7 @@ def _save(fig, out_path, dpi=200):
     for ax in fig.axes:
         for im in ax.get_images():
             im.set_rasterized(True)
+    relabel_figure(fig)
     fig.savefig(out_path, dpi=dpi, bbox_inches="tight")
     plt.close(fig)
     return out_path
@@ -56,7 +58,7 @@ def asymmetry_map(m, roi, out_path, title=""):
     """Continuous normalized asymmetry m in [-1,1] (the order parameter)."""
     fig, ax = plt.subplots(figsize=(5.6, 5.4))
     im = ax.imshow(np.where(roi, m, np.nan), cmap="seismic", vmin=-1, vmax=1)
-    ax.set_title(title or "normalized asymmetry m (~ M_z)"); ax.axis("off")
+    ax.set_title(title or "normalized asymmetry m"); ax.axis("off")
     fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04, label="m")
     return _save(fig, out_path)
 
@@ -104,7 +106,7 @@ def key_montage(img, m, mz, roi, mm, boundary, um_per_px, out_path, title=""):
     wmap = _width_map_array(mz, mm, um_per_px)
     fig, ax = plt.subplots(2, 2, figsize=(11, 10.4))
     a = ax[0, 0]; im = a.imshow(np.where(roi, m, np.nan), cmap="seismic", vmin=-1, vmax=1)
-    a.set_title("(a) asymmetry m (~ M_z)"); a.axis("off")
+    a.set_title("(a) asymmetry m"); a.axis("off")
     fig.colorbar(im, ax=a, fraction=0.046, pad=0.04)
     a = ax[0, 1]; a.imshow(img, cmap="gray")
     a.imshow(np.where(roi, mz, np.nan), cmap=_CMAP3, norm=_NORM3, alpha=0.85)

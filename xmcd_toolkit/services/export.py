@@ -1,5 +1,6 @@
 """Export everything for one image and polygon: figures, distributions, TIFFs, tables.
 Qt-free service layer."""
+from ..notation import column, using
 import os
 import csv
 import argparse
@@ -42,6 +43,7 @@ def build_args(params):
         map_mode=g("map_mode"),
         invert=bool(params.get("invert", DEFAULTS["invert"])),
         sym_centre=str(params.get("sym_centre", DEFAULTS["sym_centre"])),
+        dichroism=str(params.get("dichroism", DEFAULTS["dichroism"])),
         fig_format=g("fig_format"),
         clahe=g("clahe"),
         tile=g("tile"),
@@ -55,6 +57,12 @@ def build_args(params):
 
 
 def run_export(path, params):
+    """Full export (see _run_export); state names +ve / -ve, order parameter of params["dichroism"]."""
+    with using(params.get("dichroism", "XMCD")):
+        return _run_export(path, params)
+
+
+def _run_export(path, params):
     """Full export restricted to the polygon. Writes figures/tables/TIFFs plus a
     polygon-distributions figure, next to the source image. Returns output dir."""
     import matplotlib
@@ -143,8 +151,8 @@ def run_export(path, params):
 
     out_csv = os.path.join(base, "summary_table.csv")
     with open(out_csv, "w", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=ANALYZE.SUMMARY_COLS)
-        w.writeheader(); w.writerow({k: row.get(k) for k in ANALYZE.SUMMARY_COLS})
+        w = csv.DictWriter(f, fieldnames=[column(k) for k in ANALYZE.SUMMARY_COLS])   # up / down -> pos / neg
+        w.writeheader(); w.writerow({column(k): row.get(k) for k in ANALYZE.SUMMARY_COLS})
         
     cal = f"{args.um_per_px} um/px (FoV = whole image)" if args.um_per_px else "uncalibrated (px)"
     

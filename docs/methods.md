@@ -1,6 +1,6 @@
-# Methods: quantitative analysis of XMCD-PEEM magnetic domains
+# Methods: quantitative analysis of X-PEEM magnetic domains (XMCD and XLD)
 
-This document describes every calculation performed by `xmcd_domain_toolkit`,
+This document describes every calculation performed by `xmcd_toolkit`,
 in pipeline order, with the governing equations, the default parameters, and
 the rationale. Symbols: an image is a grid of pixels indexed by position
 `(x, y)`; `N` denotes a pixel count; angle brackets `⟨·⟩` denote a spatial
@@ -37,11 +37,30 @@ difference of absorption taken with opposite X-ray helicities:
 
     A(x,y) = ( I⁺ − I⁻ ) / ( I⁺ + I⁻ )
 
-`A` is proportional to the projection of the local magnetization onto the beam;
-in the normal-incidence PMA geometry used here, `A ∝ M_z`. Bright/dark contrast
-therefore maps to up/down out-of-plane domains. (Absolute moments would require
+`A` is proportional to the projection of the local magnetization onto the beam.
+The two signs of the contrast are called **+ve** and **−ve**: at normal incidence
+on a film with perpendicular anisotropy they are the two out-of-plane
+magnetization directions; at grazing incidence, or for in-plane magnetization,
+they are the two senses of the in-plane component along the beam. (Absolute moments would require
 spectral sum-rule analysis; for domain statistics the normalized asymmetry is
 the appropriate order parameter.)
+
+**XLD (XMLD and XNLD).** The same pipeline applies to an **XLD asymmetry**, the
+normalized difference of absorption with two orthogonal linear polarizations (or
+at the two peaks of the L-edge multiplet):
+
+    A(x,y) = ( I_LH − I_LV ) / ( I_LH + I_LV )
+
+XLD is sensitive to the *axis* of the moments, not to their sign, so it images
+antiferromagnetic as well as ferromagnetic domains. All quantities are computed
+exactly as for XMCD.
+
+**Notation.** The two states are called +ve (+1) and −ve (−1) for both kinds of
+map, with 0 the neutral band; whether they are out-of-plane or in-plane
+magnetization directions (XMCD) or two axis populations (XLD) is the user's
+interpretation. The order parameter is written **⟨m⟩** (XMCD) in this document;
+for XLD the program shows it as **⟨v_N⟩** (Néel vector) (*Dichroism*, step 1)
+and every equation is the same.
 
 After background removal (Section 3) the working signal `f(x,y)` is mapped to a
 **normalized asymmetry** `m(x,y) ∈ [−1, 1]`, scaled so saturated domains sit
@@ -67,7 +86,7 @@ shot-noise background collapses to low variance.
 
 The active area can instead be set manually (`--roi x0 y0 x1 y1`).
 
-**Illumination flattening** removes slowly varying background so the up/down
+**Illumination flattening** removes slowly varying background so the +ve/−ve
 threshold is unbiased:
 
     f = I − Gaussian(I, σ = 25 px)        (default)
@@ -77,11 +96,11 @@ threshold is unbiased:
 
 ## 4. Three-state classification (the three probability cases)
 
-Each pixel is assigned `m_z ∈ {+1, 0, −1}` (up / none / down). Background
+Each pixel is assigned `m ∈ {+1, 0, −1}` (+ve / none / −ve). Background
 (`R = 0`) is state 0. Inside the flake, the default value threshold is:
 
-    m > +t   → +1 (up)
-    m < −t   → −1 (down)
+    m > +t   → +1 (+ve)
+    m < −t   → −1 (−ve)
     |m| ≤ t  →  0 (gray: domain wall / ambiguous)
 
 with `t` set by `--m-threshold` (e.g. 0.1 → gray band [−0.1, +0.1]). Two
@@ -132,17 +151,17 @@ signed local field `n_{+1}(C) − n_{−1}(C)` maps local net magnetization.
 
 The real-space order parameter — the imaging analog of the normalized
 anomalous-Hall signal — is the spatial mean of the asymmetry over the flake,
-equivalently the area asymmetry of up vs down:
+equivalently the area asymmetry of +ve vs −ve:
 
-    ⟨m_z⟩ = (1/N) Σ m(x,y)   ≈   (A_up − A_down) / (A_up + A_down) ,  ∈ [−1, 1]
+    ⟨m⟩ = (1/N) Σ m(x,y)   ≈   (A₊ − A₋) / (A₊ + A₋) ,  ∈ [−1, 1]
 
 The change between two conditions (e.g. before/after a pulse):
 
-    Δ⟨m_z⟩ = ⟨m_z⟩_after − ⟨m_z⟩_before
+    Δ⟨m⟩ = ⟨m⟩_after − ⟨m⟩_before
 
 ---
 
-## 8. Rigorous statistics on ⟨m_z⟩
+## 8. Rigorous statistics on ⟨m⟩
 
 A naive standard error `σ/√N_pixels` is **wrong**: pixels within a domain are
 perfectly correlated, so the independent sample count is far below the pixel
@@ -170,21 +189,21 @@ and `SE_corrected ≈ 11 × SE_naive`.
 
 **Confidence intervals.** Analytic 95% CI uses the corrected error and the
 t-distribution with `N_eff − 1` dof. Independently, a **block bootstrap**
-resamples square tiles (side ≈ 2ξ) with replacement and recomputes ⟨m_z⟩
+resamples square tiles (side ≈ 2ξ) with replacement and recomputes ⟨m⟩
 (default 1000–2000 iterations); the 95% CI is the 2.5/97.5 percentiles. The
 bootstrap is the primary CI as it makes no parametric assumption and respects
 correlation empirically.
 
 **Significance vs zero** (is the flake net-magnetized?):
 
-    z = ⟨m_z⟩ / SE_corrected ,   p = 2[1 − Φ(|z|)]
+    z = ⟨m⟩ / SE_corrected ,   p = 2[1 − Φ(|z|)]
 
-**Mixture decomposition.** A 3-Gaussian mixture (down / zero / up) is fit to the
+**Mixture decomposition.** A 3-Gaussian mixture (−ve / zero / +ve) is fit to the
 per-pixel asymmetry histogram by nonlinear least squares; component means give
 the saturated levels and weights give threshold-free area fractions.
 
-**Threshold robustness.** ⟨m_z⟩ and the up/down fractions are recomputed across
-`t ∈ [0.02, 0.30]`; a flat ⟨m_z⟩(t) demonstrates the result is not an artifact
+**Threshold robustness.** ⟨m⟩ and the +ve/−ve fractions are recomputed across
+`t ∈ [0.02, 0.30]`; a flat ⟨m⟩(t) demonstrates the result is not an artifact
 of the threshold choice.
 
 ---
@@ -253,10 +272,10 @@ segmentation problem.
 
 ## 12. Domain-wall density
 
-The wall set is the boundary between up and down inside the flake (HIPR2
+The wall set is the boundary between +ve and −ve inside the flake (HIPR2
 boundary operator `b = f − erosion(f)`, applied to the interface):
 
-    W = dilation(up) ∩ down ∩ erosion(R)
+    W = dilation(+ve) ∩ −ve ∩ erosion(R)
     wall density = (Σ W) / (flake area)
 
 a scalar that increases with fragmentation.
@@ -267,9 +286,9 @@ a scalar that increases with fragmentation.
 
 For two images (before/after a pulse), each analyzed as above:
 
-    Δ⟨m_z⟩ = ⟨m_z⟩_after − ⟨m_z⟩_before
+    Δ⟨m⟩ = ⟨m⟩_after − ⟨m⟩_before
     SE_Δ   = sqrt( SE_before² + SE_after² )            (independent acquisitions)
-    z = Δ⟨m_z⟩ / SE_Δ ,   p = 2[1 − Φ(|z|)]
+    z = Δ⟨m⟩ / SE_Δ ,   p = 2[1 − Φ(|z|)]
 
 A **difference bootstrap** combines the two block-bootstrap distributions,
 `Δ* = m*_after − m*_before`, and takes the 2.5/97.5 percentiles as the 95% CI.
@@ -288,11 +307,11 @@ treated as marginal.
   fractions**, not mean domain area or domain count, for stripe/labyrinth
   states.
 - **Per-image normalization.** `m` is scaled per image; for a fixed physical
-  zero across a series, use `--bg`. The order parameter ⟨m_z⟩ measures the
-  up/down *balance* and is invariant to overall brightness.
+  zero across a series, use `--bg`. The order parameter ⟨m⟩ measures the
+  +ve/−ve *balance* and is invariant to overall brightness.
 - **Statistical claims.** Net-magnetization changes are asserted only against
   the correlation-corrected confidence interval (`N_eff`, not pixel count);
-  switching is claimed only when Δ⟨m_z⟩ clears that interval.
+  switching is claimed only when Δ⟨m⟩ clears that interval.
 
 ---
 
@@ -310,10 +329,10 @@ offset confirms the alignment; r ≈ 0 at all offsets means the patterns are unr
 optionally ∩ a drawn comparison region, restricted to pixels covered by both maps (N pixels).
 
 **Flip map and switched fractions.** With the three-state maps s_A, s_B of the domain analysis (threshold m₀, same
-despeckling), a pixel is *stayed up* / *stayed down* if s_A = s_B = ±1, *up→down* / *down→up* if it changed sign,
+despeckling), a pixel is *stayed +ve* / *stayed −ve* if s_A = s_B = ±1, *+ve→−ve* / *−ve→+ve* if it changed sign,
 and *uncertain* if it is neutral in either map. Over the pixels classified in both,
-f_{↑→↓} = N_{↑→↓}/N_{↑}^A, f_{↓→↑} = N_{↓→↑}/N_{↓}^A and switched = (N_{↑→↓} + N_{↓→↑})/N_classified. The two
-fractions refer to different populations and do not add to one; M_flip = 1 − (f_{↑→↓} + f_{↓→↑}) is +1 for an
+f_{₊→₋} = N_{₊→₋}/N_{₊}^A, f_{₋→₊} = N_{₋→₊}/N_{₋}^A and switched = (N_{₊→₋} + N_{₋→₊})/N_classified. The two
+fractions refer to different populations and do not add to one; M_flip = 1 − (f_{₊→₋} + f_{₋→₊}) is +1 for an
 unchanged pattern, 0 for independent patterns and −1 for an inverted one.
 
 **Memory r.** With a_i, b_i the asymmetry maps of A and B minus their means over Ω,
@@ -322,16 +341,16 @@ The 95 % interval comes from a block bootstrap: Ω is cut into ~1 µm blocks res
 resamples), which accounts for the spatial correlation of neighbouring pixels. The **local memory** r(x) is the
 same coefficient in a Gaussian window (σ = 10 px) around each pixel, with the local means removed.
 
-**Wall shift.** Wall pixels are up pixels with a down neighbour and vice versa; the wall shift is the median
+**Wall shift.** Wall pixels are +ve pixels with a −ve neighbour and vice versa; the wall shift is the median
 distance from the walls of B to the nearest wall of A (and back), in nm when calibrated.
 
-**Population changes.** From the counts of each state in Ω, f_k = N_k/N (k = up, neutral, down),
-⟨m_z⟩ = f_↑ − f_↓, Δf_k = f_k^B − f_k^A (ΣΔf_k = 0) and Δ⟨m_z⟩ = Δf_↑ − Δf_↓. The smallest redistribution consistent
-with the counts (the shrinking classes feed the growing ones) splits Δ⟨m_z⟩ into direct up↔down switching (each
-pixel changes f_↑ − f_↓ by 2/N) and changes through the neutral class (1/N). Because counts fix only the marginals,
+**Population changes.** From the counts of each state in Ω, f_k = N_k/N (k = +ve, neutral, −ve),
+⟨m⟩ = f₊ − f₋, Δf_k = f_k^B − f_k^A (ΣΔf_k = 0) and Δ⟨m⟩ = Δf₊ − Δf₋. The smallest redistribution consistent
+with the counts (the shrinking classes feed the growing ones) splits Δ⟨m⟩ into direct +ve↔−ve switching (each
+pixel changes f₊ − f₋ by 2/N) and changes through the neutral class (1/N). Because counts fix only the marginals,
 the fraction of Ω that changed class lies between ½Σ_k|Δf_k| and 1 − Σ_k max(0, f_k^A + f_k^B − 1); the actual
-switching follows from the flip map. Without the neutral class, f̂_↑ = N_↑/(N_↑ + N_↓) and
-m̂ = (N_↑ − N_↓)/(N_↑ + N_↓).
+switching follows from the flip map. Without the neutral class, f̂_₊ = N_₊/(N_₊ + N_₋) and
+m̂ = (N_₊ − N_₋)/(N_₊ + N_₋).
 
 ## Default parameters
 

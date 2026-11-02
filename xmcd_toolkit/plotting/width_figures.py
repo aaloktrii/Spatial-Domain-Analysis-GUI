@@ -1,4 +1,5 @@
 """Figures for core/methods/width.py (plotting layer, no analysis)."""
+from .labels import relabel_figure
 import numpy as np
 from skimage import measure as _measure
 from ..core.morphometry import per_state_morphometry
@@ -36,5 +37,6 @@ def make_width_comparison_figure(mz, roi, um_per_px, out_png, min_px=12, mm=None
         ax.invert_yaxis(); ax.set_xlabel(f"domain width ({unit})")
         ax.legend(fontsize=9); ax.grid(alpha=0.3, axis="x")
         ax.set_title((title + " -- " if title else "") + "domain width by method")
+        relabel_figure(plt.gcf())
         plt.tight_layout(); plt.savefig(out_png, dpi=130); plt.close(fig)
     return out_png, dw

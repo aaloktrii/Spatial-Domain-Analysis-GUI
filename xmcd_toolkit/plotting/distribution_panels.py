@@ -1,5 +1,7 @@
 """Width / period distribution panels of the preview and export.
 Plotting layer."""
+from .labels import relabel_figure
+from ..notation import relabel
 from ..colors import COLOR_UP, COLOR_DOWN
 from ..core import compare_lognormal_gaussian, qq_series_per_state
 
@@ -49,7 +51,7 @@ def _draw_gauss_compare(ax, mm, um, quantity="width"):
     ax.set_ylabel("probability density")
 
 
-def draw_distributions(ax, res):
+def draw_distributions(ax, res, kind="XMCD"):
     """Draw the within-polygon distributions onto a list of axes:
     [width, period, probability] or [..., Q-Q] or [..., Q-Q, log-normal-vs-Gaussian].
     Shared by the GUI preview and the file export.
@@ -94,7 +96,7 @@ def draw_distributions(ax, res):
     for st, col, lab in (() if mm is None else ((mm["up"], COLOR_UP, "up"), (mm["down"], COLOR_DOWN, "down"))):
         w = st["widths_px"] * w_scale
         if w.size:
-            ax[0].hist(w, bins=24, alpha=0.55, color=col, label=lab)
+            ax[0].hist(w, bins=24, alpha=0.55, color=col, label=relabel(lab, kind))
     if mm is not None:
         ax[0].set_xlabel(f"domain width ({unit})"); ax[0].set_ylabel("count")
         per = (mm.get("domain_period_nm") if um else mm["domain_period"])
@@ -105,15 +107,15 @@ def draw_distributions(ax, res):
         for st, col, lab in ((mm["up"], COLOR_UP, "up"), (mm["down"], COLOR_DOWN, "down")):
             p = st["periods_px"] * w_scale
             if p.size:
-                ax[1].hist(p, bins=24, alpha=0.55, color=col, label=lab)
+                ax[1].hist(p, bins=24, alpha=0.55, color=col, label=relabel(lab, kind))
         ax[1].set_xlabel(f"domain period ({unit})"); ax[1].set_ylabel("count")
         ax[1].set_title("(b) period distribution", fontsize=9); ax[1].legend(fontsize=7)
 
-    ax[2].bar(["P(up)", "P(0)", "P(dn)"],
+    ax[2].bar([relabel(t, kind) for t in ("P(up)", "P(0)", "P(dn)")],
               [pl["p_up"], pl["p_zero"], pl["p_down"]],
               color=[COLOR_UP, "#bbbbbb", COLOR_DOWN])
     ax[2].set_ylim(0, 1); ax[2].set_ylabel("probability")
-    ax[2].set_title(f"(c) +/- probability\nnet <m_z>={pl['net_m']:+.3f}", fontsize=9)
+    ax[2].set_title(relabel(f"(c) +/- probability\nup vs down {pl['net_m']:+.3f}", kind), fontsize=9)
     for i, v in enumerate([pl["p_up"], pl["p_zero"], pl["p_down"]]):
         ax[2].text(i, v + 0.02, f"{v:.2f}", ha="center", fontsize=8)
 
@@ -157,6 +159,11 @@ def draw_distributions(ax, res):
             _draw_gauss_compare(ax[4], mm, um, quantity=dist_quantity)
         else:
             ax[4].axis("off")
+    for a in ax:                          # state names (+ve / -ve) in titles and legends (Q-Q, fits)
+        a.set_title(relabel(a.get_title(), kind), fontsize=9)
+        leg = a.get_legend()
+        for t in (leg.get_texts() if leg else ()):
+            t.set_text(relabel(t.get_text(), kind))
 
 
 def make_distributions_figure(res, out_png):
@@ -170,7 +177,8 @@ def make_distributions_figure(res, out_png):
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     fig, ax = plt.subplots(1, 5, figsize=(23, 4.4))
-    draw_distributions(list(ax), res)
+    draw_distributions(list(ax), res, res.get("params", {}).get("dichroism", "XMCD"))
     plt.tight_layout()
+    relabel_figure(plt.gcf())
     plt.savefig(out_png, dpi=130); plt.close(fig)
     return out_png

@@ -21,6 +21,7 @@ from ..core import (
     asymmetry_field,
 )
 from ..core.offset import sym_centre
+from ..notation import relabel
 from ..core.regions import polygon_to_mask, resolve_um
 
 
@@ -309,7 +310,14 @@ def analyze_with_polygon(path, params):
     }
 
 
-def summary_text(res):
+def summary_text(res, kind=None):
+    """Results text: states +ve / -ve, order parameter of `kind` (XMCD <m>, XLD <v_N>; default: the parameters)."""
+    kind = kind or res.get("params", {}).get("dichroism", "XMCD")
+    return relabel(_summary_lines(res, kind), kind)
+
+
+def _summary_lines(res, kind="XMCD"):
+    L = lambda t, w=0: relabel(t, kind).ljust(w)          # state name, padded so the '=' signs line up
     um = res["um"]; unit = "um" if um else "px"
     # domain width/period display in nm when calibrated -- the natural scale
     # for XMCD-PEEM domains; um_per_px itself (the actual calibration) is
@@ -338,12 +346,12 @@ def summary_text(res):
     if four:
         _s = lambda v: f"{v:+.3f}" if v == v else "  n/a "
         lines += [
-            f"pixels  up   = {four['N_up']}",
-            f"        0    = {four['N_0']}",
-            f"        down = {four['N_down']}",
-            f"P(up/0/dn)   = {pl['p_up']:.3f} / {pl['p_zero']:.3f} / {pl['p_down']:.3f}",
+            f"pixels  {L('up', 5)}= {four['N_up']}",
+            f"        {L('0', 5)}= {four['N_0']}",
+            f"        {L('down', 5)}= {four['N_down']}",
+            f"{L('P(up/0/dn)', 13)}= {pl['p_up']:.3f} / {pl['p_zero']:.3f} / {pl['p_down']:.3f}",
             f"<m_z>  (m_0 = {m0})" if m0 is not None else "<m_z>",
-            "            m_z(m_0)    m_z",
+            f"{'':12}{L('m_z(m_0)', 11)}{L('m_z')}",
             f"discrete    {_s(four['discrete_m0'])}     {_s(four['discrete'])}",
             f"continuous  {_s(four['continuous_m0'])}     {_s(four['continuous'])}",
             f"up vs down  {_s(four['up_vs_down'])}  (no 0 px)",

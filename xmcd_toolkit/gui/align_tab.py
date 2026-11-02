@@ -31,7 +31,7 @@ class AlignTab(QtWidgets.QWidget):
         self.eA, self.eB, self.eBoth = (QtWidgets.QRadioButton(t) for t in ("A", "B", "both"))
         self.eB.setChecked(True)
         self.sRot = spin(-180, 180, 0.1, 2, "+ = counter-clockwise")
-        self.sDy, self.sDx = spin(-2000, 2000, 0.5, 1, "down (px)"), spin(-2000, 2000, 0.5, 1, "right (px)")
+        self.sDy, self.sDx = spin(-2000, 2000, 0.5, 1, "shift toward the bottom (px)"), spin(-2000, 2000, 0.5, 1, "right (px)")
         self.cFlipH, self.cFlipV = QtWidgets.QCheckBox("Flip ↔"), QtWidgets.QCheckBox("Flip ↕")
         f = QtWidgets.QFormLayout()
         f.addRow("Edit:", row(self.eA, self.eB, self.eBoth))

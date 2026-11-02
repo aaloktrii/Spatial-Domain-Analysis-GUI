@@ -25,7 +25,7 @@ from .preview import picture_of, preview_polygon
 DEFAULT_PARAMS = {**{k: DEFAULTS[k] for k in ("m_threshold", "tv_weight", "flatten_sigma", "min_px", "width_method",
                                                  "denoise_method", "boundary_method", "connectivity", "z_neutral",
                                                  "states", "clahe", "flatten", "input_mode", "map_mode", "invert",
-                                                 "sym_centre")},
+                                                 "sym_centre", "dichroism")},
                   "polygon": None, "bg_polygon": None, "um_per_px": None, "fov": None, "show_boundary": False,
                   "measure_widths": None}
 LIVE_WIDTHS_MAX_PX = 4_000_000   # above this, domain widths are measured on request (or at export)

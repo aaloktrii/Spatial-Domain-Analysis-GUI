@@ -3,6 +3,7 @@
 Categorical maps (three-state, flip map) are drawn as vector shapes, one compound path per category with
 pixel-exact outlines: they stay editable in Illustrator, and no raster is stored as indexed colour (which
 Illustrator renders wrongly). Save with save_pdf() for an editable, Illustrator-safe PDF."""
+from .labels import relabel_figure
 import numpy as np
 import matplotlib
 from matplotlib.patches import Patch, PathPatch
@@ -10,6 +11,7 @@ from matplotlib.path import Path as MPath
 from scipy import ndimage
 from skimage.measure import find_contours
 
+from ..notation import relabel
 from ..colors import COLOR_UP, COLOR_DOWN, COLOR_UNCERTAIN, SWITCH_PALETTES
 
 FLIP_LABELS = ("stayed down", "stayed up", "up → down", "down → up", "uncertain")
@@ -166,7 +168,7 @@ def draw_align(fig, A, B, titles, overlay="magenta / green", pts_a=(), pts_b=(),
     return ax
 
 
-def draw_compare(fig, sA, sB, flip, r_local, roi, m, titles, palette="purple / magenta", crop=True):
+def draw_compare(fig, sA, sB, flip, r_local, roi, m, titles, palette="purple / magenta", crop=True, kind="XMCD"):
     """A and B (three states), flip map, local memory. sA, sB, flip, r_local on the common grid."""
     fig.clear()
     ys, xs = np.nonzero(roi)
@@ -177,10 +179,10 @@ def draw_compare(fig, sA, sB, flip, r_local, roi, m, titles, palette="purple / m
         outline(a, roi[sl], "0.3", 0.4)
     fc = flip_colours(palette)
     categorical(ax[2], np.where(roi, flip, -9)[sl], {i: fc[i] for i in range(4)},
-                f"switched {m['switched_pct']:.0f}% of classified\n"
-                f"{m['up_to_down_pct']:.0f}% of up → down · {m['down_to_up_pct']:.0f}% of down → up")
+                relabel(f"switched {m['switched_pct']:.0f}% of classified\n"
+                        f"{m['up_to_down_pct']:.0f}% of up → down · {m['down_to_up_pct']:.0f}% of down → up", kind))
     outline(ax[2], roi[sl], "k", 0.6)
-    ax[2].legend(handles=[Patch(facecolor=fc[i], edgecolor="0.4", lw=0.4, label=l) for i, l in enumerate(FLIP_LABELS)],
+    ax[2].legend(handles=[Patch(facecolor=fc[i], edgecolor="0.4", lw=0.4, label=relabel(l, kind)) for i, l in enumerate(FLIP_LABELS)],
                  fontsize=7, loc="upper center", bbox_to_anchor=(0.5, -0.02), ncol=3, frameon=False)
     im = ax[3].imshow(np.where(roi, r_local, np.nan)[sl], cmap="PiYG", vmin=-1, vmax=1, interpolation="nearest")
     ax[3].set_title(f"local memory (r = {m['r']:+.2f} [{m['r_ci_lo']:+.2f}, {m['r_ci_hi']:+.2f}])", fontsize=8)
@@ -190,19 +192,19 @@ def draw_compare(fig, sA, sB, flip, r_local, roi, m, titles, palette="purple / m
     return ax
 
 
-def draw_populations(fig, change, title=""):
+def draw_populations(fig, change, title="", kind="XMCD"):
     """Bars: Delta f_up, Delta f_0, Delta f_down and Delta<m_z> (direct up<->down part and via neutral), in %."""
     fig.clear()
     ax = fig.subplots(1, 2)
     keys = (("d_up", "Δf↑", COLOR_UP), ("d_neutral", "Δf₀", "0.6"), ("d_down", "Δf↓", COLOR_DOWN))
     vals = [100 * change[k] for k, _, _ in keys]
-    ax[0].bar([l for _, l, _ in keys], vals, color=[c for _, _, c in keys])
+    ax[0].bar([relabel(l, kind) for _, l, _ in keys], vals, color=[c for _, _, c in keys])
     ax[0].axhline(0, color="k", lw=0.6)
     ax[0].set_ylabel("% of the region")
     for i, v in enumerate(vals):
         ax[0].annotate(f"{v:+.2f}", (i, v), ha="center", va="bottom" if v >= 0 else "top", fontsize=8)
     d, dd, dn = 100 * change["d_mz"], 100 * change["d_mz_direct"], 100 * change["d_mz_via_neutral"]
-    ax[1].bar(["direct", "via f₀", "Δ⟨m_z⟩"], [dd, dn, d], color=["0.35", "0.7", "k"])
+    ax[1].bar(["direct", "via f₀", relabel("Δ⟨m_z⟩", kind)], [dd, dn, d], color=["0.35", "0.7", "k"])
     ax[1].axhline(0, color="k", lw=0.6)
     for i, v in enumerate((dd, dn, d)):
         ax[1].annotate(f"{v:+.2f}", (i, v), ha="center", va="bottom" if v >= 0 else "top", fontsize=8)
@@ -226,7 +228,7 @@ def draw_shift_check(fig, res):
     ax.plot(dx, dy, "*", color="k", ms=12, label=f"best: r = {rb:+.3f} at dy {dy:+d}, dx {dx:+d} px"
             + (f", {ang:+.1f}°" if ang else ""))
     ax.set_xlabel("dx, B moved right (px)")
-    ax.set_ylabel("dy, B moved down (px)")
+    ax.set_ylabel("dy, B moved toward the bottom (px)")
     ax.set_title(f"r between A and shifted B (rotation {ang:+.1f}°)", fontsize=8)
     ax.legend(fontsize=7, frameon=False, loc="lower left")
     fig.colorbar(im, ax=ax, shrink=0.8, label="r")
@@ -240,4 +242,5 @@ def draw_shift_check(fig, res):
 def save_pdf(fig, path):
     """Editable PDF: text as text; uncompressed, so no image is stored as indexed colour."""
     with matplotlib.rc_context({"pdf.fonttype": 42, "ps.fonttype": 42, "pdf.compression": 0}):
+        relabel_figure(fig)
         fig.savefig(path)

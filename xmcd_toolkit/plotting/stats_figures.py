@@ -1,4 +1,5 @@
 """Figures for core/stats.py (plotting layer, no analysis)."""
+from .labels import relabel_figure
 import numpy as np
 from scipy import ndimage as ndi
 from skimage import measure
@@ -52,6 +53,7 @@ def make_domain_wall_figure(img, roi, nd, out_png, title="", tile=None):
     if title:
         fig.suptitle(title, fontsize=12)
     plt.tight_layout(rect=[0, 0, 1, 0.95] if title else None)
+    relabel_figure(plt.gcf())
     plt.savefig(out_png, dpi=130); plt.close(fig)
     return out_png, dist
 
@@ -102,5 +104,6 @@ def make_stats_figure(mz, roi, out_png, tile=16, title=""):
     if title:
         fig.suptitle(title, fontsize=12)
     plt.tight_layout()
+    relabel_figure(plt.gcf())
     plt.savefig(out_png, dpi=130); plt.close(fig)
     return out_png
