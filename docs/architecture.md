@@ -13,7 +13,7 @@ job without a GUI. `tests/test_structure_and_math.py` enforces the layer rules.
 ├── tests/               layer rules + maths (python -m pytest)
 └── xmcd_toolkit/
     ├── __init__.py      public API: every name importable as before (from xmcd_toolkit import ...)
-    ├── colors.py        up / down / neutral colours, flip-map palettes (single source of truth)
+    ├── colors.py        +ve / −ve / neutral colours, flip-map palettes (single source of truth)
     ├── defaults.py      pipeline defaults shared by GUI, CLI and export (single source of truth)
     │
     ├── core/            ANALYSIS: numpy / scipy / scikit-image only; no matplotlib, no Qt
@@ -23,7 +23,7 @@ job without a GUI. `tests/test_structure_and_math.py` enforces the layer rules.
     │   ├── domain.py            analyze_xmcd: segmentation, flattening, classification, scalar metrics
     │   ├── stats.py             three-state field, PDF, number density, net change, domain counts
     │   ├── distributions.py     log-normal / Gaussian / power-law fits
-    │   ├── magnetization.py     <m_z> statistics, correlation length, bootstrap CIs
+    │   ├── magnetization.py     <m> statistics, correlation length, bootstrap CIs
     │   ├── morphometry.py       widths, periods, domain counts / areas, summaries (CSV / text export)
     │   ├── methods/             swappable denoise / background / boundary / width methods (registries)
     │   ├── regions.py           polygon -> mask, um / px calibration
@@ -33,7 +33,7 @@ job without a GUI. `tests/test_structure_and_math.py` enforces the layer rules.
     │   ├── transform.py         per-image rotation / scale / flips / shift + view rotation; point-pair fit
     │   ├── registration.py      automatic alignment; correlation vs shift
     │   ├── comparison.py        flip map, switched fractions, memory r (+ bootstrap), local r, wall shift
-    │   ├── populations.py       Δf↑ / Δf₀ / Δf↓, Δ<m_z>, minimal redistribution, bounds, matrix
+    │   ├── populations.py       Δf₊ / Δf₀ / Δf₋, Δ<m>, minimal redistribution, bounds, matrix
     │   └── session.py           session file (xarray DataTree: /images, /analysis/compare, /history)
     │
     ├── plotting/        FIGURES: matplotlib only; no Qt; numbers come from core/
@@ -65,11 +65,11 @@ job without a GUI. `tests/test_structure_and_math.py` enforces the layer rules.
 ## Conventions
 
 - **Definitions** (identical in the docstrings and docs/methods.md):
-  - Magnetization: XMCD asymmetry `A = (I+ − I−)/(I+ + I−) ~ M_z`.
-  - Three states: `m_z ∈ {+1 up, 0 neutral (|m| ≤ m₀) / wall, −1 down}`.
-  - Area fractions `f_k = N_k / N` (k = up, neutral, down), `<m_z> = f_up − f_down`.
-  - Net change: `Δ<m_z> = <m_z>_after − <m_z>_before`.
-- **Colours**: up blue, down red everywhere (colors.py); switched pixels purple / magenta or orange / dark green.
+  - Signal: dichroism asymmetry `A = (I₁ − I₂)/(I₁ + I₂)`, XMCD (circular) or XLD (linear: XMLD + XNLD).
+  - Three states: `m ∈ {+1 +ve, 0 neutral (|m| ≤ m₀) / wall, −1 −ve}`.
+  - Area fractions `f_k = N_k / N` (k = +ve, neutral, −ve), `<m> = f₊ − f₋`.
+  - Net change: `Δ<m> = <m>_after − <m>_before`.
+- **Colours**: +ve blue, −ve red everywhere (colors.py); switched pixels purple / magenta or orange / dark green.
 - **Calibration** is one parameter `um_per_px` (None = pixels).
 - **Tunable knobs** are arguments with defaults from `defaults.py`, never hard-coded constants.
 - **Where new code goes**: a new number → `core/`; its figure → `plotting/`; a new workflow → `services/`; a new

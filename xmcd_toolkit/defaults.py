@@ -32,6 +32,7 @@ DEFAULTS = {
     "detailed":     False,  # also write the diagnostics/ folder (12-panel, fits, comparisons)
     "input_mode":   "asymmetry_map",  # "asymmetry_map" (pre-coded, default), "grayscale" (raw XMCD), "igor_export"
     "map_mode":     "auto",  # asymmetry_map decode: auto (colour -> rb, grey -> bw), rb (blue/red), bw (white/black)
+    "dichroism":    "XMCD", # order-parameter name only: XMCD -> <m>, XLD (XMLD + XNLD) -> <v_N>
     "sym_centre":   "0",    # map zero (TensorSpec Sym ±): "0" (bg-region mean if drawn), "median", "mean"
     "invert":       False,  # swap up / down (a map whose colours mean the opposite sign)
     "fig_format":   "png",  # publication figure format for the export: png / eps / pdf

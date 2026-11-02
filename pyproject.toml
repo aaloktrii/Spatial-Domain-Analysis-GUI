@@ -5,13 +5,13 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "spatial-domain-analysis"
 version = "2.0.0"
-description = "Quantitative analysis and comparison of magnetic domains in XMCD-PEEM images"
+description = "Quantitative analysis and comparison of magnetic domains in X-PEEM images (XMCD and XLD)"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Aalok Tiwari" }]
 requires-python = ">=3.10"
-keywords = ["XMCD", "PEEM", "magnetic domains", "domain analysis", "image analysis", "spintronics"]
+keywords = ["X-PEEM", "XMCD", "XLD", "XMLD", "PEEM", "magnetic domains", "domain analysis", "image analysis", "spintronics"]
 classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent",

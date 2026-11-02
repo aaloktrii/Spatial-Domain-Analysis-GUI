@@ -11,6 +11,7 @@ from PySide6 import QtCore, QtWidgets
 from ..colors import SWITCH_PALETTES
 from ..core import populations
 from ..plotting import compare_figures as cf
+from ..notation import column, keys, relabel
 from . import region_editor as re_
 from .widgets import Canvas, button, combo, group, heading, ispin, row, spin, splitter, not_ready_note
 
@@ -51,7 +52,7 @@ class CompareTab(QtWidgets.QWidget):
         self.sBlock = spin(0.2, 5, 0.1, 1, "bootstrap block size (µm; 32 px if uncalibrated)", 1.0)
         f = QtWidgets.QFormLayout()
         f.addRow(self.lPair)
-        note = QtWidgets.QLabel("Up / down from step 5 (same m threshold).")
+        note = QtWidgets.QLabel("+ve / −ve from step 5 (same m threshold).")
         note.setWordWrap(True)
         f.addRow(note)
         f.addRow("Local r window σ (px):", self.sWin)
@@ -59,7 +60,7 @@ class CompareTab(QtWidgets.QWidget):
         f.addRow("Block (µm):", self.sBlock)
         self.groups.append(group("12. Compare", f))
 
-        self.cPalette = combo(list(SWITCH_PALETTES), "colours of switched pixels; stayed up / down keep the map colours")
+        self.cPalette = combo(list(SWITCH_PALETTES), "colours of switched pixels; stayed +ve / −ve keep the map colours")
         self.cCrop = QtWidgets.QCheckBox("Crop to the ROI")
         self.cCrop.setChecked(True)
         self.cPop = combo([("common ROI (same pixels)", "common"), ("each image's own active area", "own")])
@@ -152,7 +153,7 @@ class CompareTab(QtWidgets.QWidget):
         m, L = self.result["metrics"], self.result["layers"]
         crop = self.cCrop.isChecked() and not self.cDraw.isChecked()
         ax = cf.draw_compare(self.cv.fig, self.ws.final(a, "mz"), self.ws.final(b, "mz"), L["flip"], L["r_local"],
-                             L["roi"], m, (a, b), self.cPalette.currentText(), crop=crop)
+                             L["roi"], m, (a, b), self.cPalette.currentText(), crop=crop, kind=self.kind())
         if self.editor:
             self.editor.disconnect()
             self.editor = None
@@ -161,23 +162,28 @@ class CompareTab(QtWidgets.QWidget):
         self.cv.draw()
         self._fill(m)
 
+    def kind(self):
+        """Dichroism of image A (Domains, step 1)."""
+        return self.main.domains.kind(self.main.align.pair()[0])
+
     def _fill(self, m):
         unit = m.get("wall_shift_unit", "px")
+        kind = self.kind()
         self.table.setRowCount(len(METRICS))
         for i, (k, lab, fmt) in enumerate(METRICS):
-            lab = lab + (f" ({unit})" if k.startswith("wall") else "")
+            lab = relabel(lab, kind) + (f" ({unit})" if k.startswith("wall") else "")
             for j, v in enumerate((lab, _f(m.get(k), fmt))):
                 self.table.setItem(i, j, QtWidgets.QTableWidgetItem(v))
         p = m["populations_common_roi" if self.cPop.currentData() == "common" else "populations_own_roi"]
-        rows = [(lab, f"{100 * p['A'][k]:.2f} %", f"{100 * p['B'][k]:.2f} %",
+        rows = [(relabel(lab, kind), f"{100 * p['A'][k]:.2f} %", f"{100 * p['B'][k]:.2f} %",
                  f"{100 * (p['B'][k] - p['A'][k]):+.2f} %") for k, lab in POP_ROWS]
-        rows += [(lab, "", "", (f"{100 * p['change'][k]:+.2f} %" if not k.startswith("changed")
+        rows += [(relabel(lab, kind), "", "", (f"{100 * p['change'][k]:+.2f} %" if not k.startswith("changed")
                                 else f"{100 * p['change'][k]:.2f} %")) for k, lab in CHANGE_ROWS]
         self.pop.setRowCount(len(rows))
         for i, r in enumerate(rows):
             for j, v in enumerate(r):
                 self.pop.setItem(i, j, QtWidgets.QTableWidgetItem(v))
-        cf.draw_populations(self.cvPop.fig, p["change"], "net change (% of the region)")
+        cf.draw_populations(self.cvPop.fig, p["change"], "net change (% of the region)", kind=kind)
         self.cvPop.draw()
         self.lStatus.setText("Populations are net changes of the counts; the flip map shows the actual switching.")
 
@@ -228,14 +234,14 @@ class CompareTab(QtWidgets.QWidget):
             w.writerow(["settings", json.dumps(self.result["settings"])])
             w.writerow([])
             for k, lab, _ in METRICS:
-                w.writerow([k, m.get(k)])
+                w.writerow([column(k), m.get(k)])
             for which in ("populations_common_roi", "populations_own_roi"):
                 p = m[which]
                 for side in ("A", "B"):
                     for k in ("up", "neutral", "down", "mz", "up_hat", "mz_hat", "n"):
-                        w.writerow([f"{which}.{side}.{k}", p[side][k]])
+                        w.writerow([f"{which}.{side}.{column(k)}", p[side][k]])
                 for k, v in p["change"].items():
-                    w.writerow([f"{which}.change.{k}", json.dumps(v) if isinstance(v, dict) else v])
+                    w.writerow([f"{which}.change.{column(k)}", json.dumps(keys(v)) if isinstance(v, dict) else v])
         self.main.status(f"exported {f.name}, {f.stem}_populations.pdf and {f.with_suffix('.csv').name}")
 
     def mz_matrix(self):
@@ -245,7 +251,7 @@ class CompareTab(QtWidgets.QWidget):
         common = self.cPop.currentData() == "common"
         names, M = populations.mz_matrix(self.ws.population_table(keys, common=common))
         dlg = QtWidgets.QDialog(self)
-        dlg.setWindowTitle("Δ⟨m_z⟩ (% of the region), row = from, column = to")
+        dlg.setWindowTitle(relabel("Δ⟨m_z⟩ (% of the region), row = from, column = to", self.kind()))
         t = QtWidgets.QTableWidget(len(names), len(names))
         t.setHorizontalHeaderLabels(names)
         t.setVerticalHeaderLabels(names)

@@ -29,6 +29,10 @@ What it computes
 Depends only on numpy / scipy (figures: plotting/magnetization_figures.py).
 """
 
+import contextlib
+import io
+
+from ..notation import relabel
 import numpy as np
 from scipy import optimize, stats
 
@@ -495,6 +499,14 @@ def magnetization_statistics(layers, m_threshold=0.1, n_boot=2000):
 
 
 def print_magnetization_report(res):
+    """Print the report (state names +ve / -ve, see notation.py)."""
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        _print_magnetization_report(res)
+    print(relabel(buf.getvalue()), end="")
+
+
+def _print_magnetization_report(res):
     print("=" * 64)
     print("  RIGOROUS MAGNETIZATION STATISTICS")
     print("=" * 64)

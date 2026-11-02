@@ -19,6 +19,7 @@ from ..core.methods.denoise import DENOISERS
 from ..core.methods.width import WIDTH_METHOD_LABELS, WIDTH_METHODS
 from ..core.regions import calibration
 from ..defaults import DEFAULTS
+from ..notation import DICHROISM, relabel
 from ..plotting.compare_figures import screen_sample
 from ..plotting.distribution_panels import draw_distributions
 from ..services.export import run_export
@@ -53,9 +54,13 @@ class DomainsTab(QtWidgets.QWidget):
                         button("Remove", self.remove)))
         load.addRow("Images:", self.list)
         load.addRow(how)
-        self.cInvert = QtWidgets.QCheckBox("Invert colours (swap up / down)")
-        self.cInvert.setToolTip("for a map whose colours mean the opposite sign (white or red = down); the raw "
+        self.cInvert = QtWidgets.QCheckBox("Invert colours (swap +ve / −ve)")
+        self.cInvert.setToolTip("for a map whose colours mean the opposite sign; the raw "
                                 "panel still shows the file as it is")
+        self.cDichro = combo([(lab, key) for key, lab in DICHROISM], "order-parameter name only: XMCD ⟨m⟩, XLD "
+                                                                    "(XMLD + XNLD) ⟨v_N⟩; states are +ve / −ve "
+                                                                    "for both, and the numbers are the same")
+        load.addRow("Dichroism:", self.cDichro)
         load.addRow(self.cInvert)
         self.cSetFrom = combo([], "an image whose settings (invert, calibration, denoising, threshold, domain "
                                   "size, methods; not the outlines) you want to reuse")
@@ -191,6 +196,7 @@ class DomainsTab(QtWidgets.QWidget):
             w.toggled.connect(self.schedule)
         self.cShowC.toggled.connect(self.redraw)
         self.cInvert.toggled.connect(self.schedule)
+        self.cDichro.currentIndexChanged.connect(self._dichroism_changed)
         self.cCentre.currentIndexChanged.connect(self.schedule)
         self.cTarget.currentIndexChanged.connect(self.redraw)
         self.cTool.currentIndexChanged.connect(self.redraw)
@@ -260,7 +266,7 @@ class DomainsTab(QtWidgets.QWidget):
             return
         self._show_out()
         p = self.ws.images[k]["params"]
-        widgets = (self.cInvert, self.cCentre, self.cDen, self.cConn, self.cWidth, self.cBound, self.cQty, self.cCal,
+        widgets = (self.cDichro, self.cInvert, self.cCentre, self.cDen, self.cConn, self.cWidth, self.cBound, self.cQty, self.cCal,
                    self.slTV, self.slM, self.sFlat, self.sMin, self.sW, self.sH, self.cShowB, self.cQQ, self.cGauss,
                    self.cMeasure)
         for w in widgets:
@@ -280,6 +286,7 @@ class DomainsTab(QtWidgets.QWidget):
         self.cShowB.setChecked(bool(p.get("show_boundary")))
         self.cMeasure.setChecked(p.get("measure_widths") is not False)
         self.cInvert.setChecked(bool(p.get("invert")))
+        self.cDichro.setCurrentIndex(max(self.cDichro.findData(p.get("dichroism", "XMCD")), 0))
         self.cCentre.setCurrentIndex(max(self.cCentre.findData(p.get("sym_centre", "0")), 0))
         self.cQQ.setChecked(bool(p.get("qq_plot")))
         self.cGauss.setChecked(bool(p.get("gauss_compare")))
@@ -298,7 +305,7 @@ class DomainsTab(QtWidgets.QWidget):
              "dist_quantity": self.cQty.currentData(), "qq_plot": self.cQQ.isChecked(),
              "gauss_compare": self.cGauss.isChecked(), "cal_mode": self.cCal.currentData(),
              "cal_w": self.sW.value() or None, "cal_h": self.sH.value() or None,
-             "invert": self.cInvert.isChecked(), "sym_centre": self.cCentre.currentData()}
+             "invert": self.cInvert.isChecked(), "dichroism": self.cDichro.currentData(), "sym_centre": self.cCentre.currentData()}
         p["um_per_px"] = self._um(p)
         return p
 
@@ -336,13 +343,24 @@ class DomainsTab(QtWidgets.QWidget):
         if not self.ws.is_ready(k):
             self.main.status(f"{k}: changed, press Calculate (step 5)")
 
+    def _dichroism_changed(self, *_):
+        """Name only (XMCD <m> / XLD <v_N>): stored at once, nothing to recalculate."""
+        k = self.key
+        if k:
+            self.ws.images[k]["params"]["dichroism"] = self.cDichro.currentData()
+            self.redraw()
+
+    def kind(self, k=None):
+        k = k or self.key
+        return self.ws.images[k]["params"].get("dichroism", "XMCD") if k in self.ws.images else "XMCD"
+
     def _processed_title(self, k):
         im = self.ws.images[k]
         if im["result"] is None:
             return "processed: not calculated yet (press Calculate)"
         if im.get("stale"):
             return "processed: out of date (press Calculate)"
-        return "processed: three-state m_z inside the active area"
+        return relabel("processed: three-state m_z inside the active area", self.kind(k))
 
     def calculate(self, *_):
         k = self.key
@@ -431,9 +449,10 @@ class DomainsTab(QtWidgets.QWidget):
             elif b.get("edge") is not None:                    # edge-mask methods: points
                 ys, xs = np.nonzero(b["edge"])
                 axp.plot(xs, ys, ".", color="#00e5ff", ms=0.5)
-        axp.legend(handles=[Patch(facecolor=COLOR_UP, label="up (+1)"),
+        axp.legend(handles=[Patch(facecolor=COLOR_UP, label=relabel("up (+1)", self.kind(k))),
                             Patch(facecolor=COLOR_NEUTRAL, label="neutral (0)"),
-                            Patch(facecolor=COLOR_DOWN, label="down (−1)")], loc="upper right", fontsize=7)
+                            Patch(facecolor=COLOR_DOWN, label=relabel("down (−1)", self.kind(k)))],
+                   loc="upper right", fontsize=7)
         ax.set_title(f"{k}: raw file (editing: {self.cTarget.currentText()})", fontsize=8)
         axp.set_title(self._processed_title(k), fontsize=8, color="#b00" if not self.ws.is_ready(k) else "black")
         for a in (ax, axp):
@@ -445,7 +464,7 @@ class DomainsTab(QtWidgets.QWidget):
         for a in axd:
             a.axis("off")
         if res is not None:
-            draw_distributions(axd, res)
+            draw_distributions(axd, res, self.kind(k))
         self.editor = re_.RegionEditor(ax, self._region_changed, self.cTool.currentText(), self.sSides.value(),
                                        p.get(target))
         self.cv.draw()
@@ -454,7 +473,7 @@ class DomainsTab(QtWidgets.QWidget):
                                       "then press Calculate (step 5).")
         else:
             self.results.setPlainText(("OUT OF DATE: press Calculate\n\n" if im.get("stale") else "")
-                                      + summary_text(res))
+                                      + summary_text(res, self.kind(k)))
 
     # ---- regions
     def _region_changed(self, verts):

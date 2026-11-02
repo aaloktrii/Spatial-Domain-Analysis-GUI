@@ -1,4 +1,5 @@
 """Figures for core/morphometry.py (plotting layer, no analysis)."""
+from .labels import relabel_figure
 import numpy as np
 from scipy import ndimage as ndi
 from skimage.morphology import skeletonize
@@ -80,6 +81,7 @@ def export_panels_tiff(img, mz, roi, um_per_px, outdir, stem, dpi=300):
         cb.ax.set_yticklabels(["down ($-1$)", "none ($0$)", "up ($+1$)"])
         plt.tight_layout()
         f1 = os.path.join(outdir, f"{stem}_three_state.tiff")
+        relabel_figure(plt.gcf())
         plt.savefig(f1, dpi=dpi); plt.close(fig); paths.append(f1)
 
         wmap = np.zeros(mz.shape)
@@ -94,10 +96,11 @@ def export_panels_tiff(img, mz, roi, um_per_px, outdir, stem, dpi=300):
         cb.set_label(f"domain width ({unit})")
         plt.tight_layout()
         f2 = os.path.join(outdir, f"{stem}_domain_width.tiff")
+        relabel_figure(plt.gcf())
         plt.savefig(f2, dpi=dpi); plt.close(fig); paths.append(f2)
 
         fig, ax = plt.subplots(figsize=(5.2, 6.2))
-        ax.imshow(masked, cmap=cmap3, norm=norm3)
+        im = ax.imshow(masked, cmap=cmap3, norm=norm3)      # this panel's own three states for the colour bar
         sk = np.zeros((*mz.shape, 4))
         for st, col in ((mm["up"], [1, 1, 0, 1]), (mm["down"], [0, 1, 1, 1])):
             if st["skeleton"] is not None:
@@ -108,6 +111,7 @@ def export_panels_tiff(img, mz, roi, um_per_px, outdir, stem, dpi=300):
         cb.ax.set_yticklabels(["down", "none", "up"])
         plt.tight_layout()
         f3 = os.path.join(outdir, f"{stem}_skeletons.tiff")
+        relabel_figure(plt.gcf())
         plt.savefig(f3, dpi=dpi); plt.close(fig); paths.append(f3)
     return paths
 
@@ -183,6 +187,7 @@ def make_morphometry_figure(mz, roi, um_per_px, out_png, title="", min_px=0, mm=
         if title:
             fig.suptitle(title, fontsize=12)
         plt.tight_layout(rect=[0, 0, 1, 0.94])
+        relabel_figure(plt.gcf())
         plt.savefig(out_png, dpi=130); plt.close(fig)
     return out_png, mm
 
@@ -284,6 +289,7 @@ def make_size_distribution_figure(mz, um_per_px=None, min_px=0, bins=24,
         out_paths = []
         for ext in formats:
             path = f"{out_stem}.{ext}"
+            relabel_figure(fig)
             fig.savefig(path, dpi=dpi, format=("tiff" if ext == "tiff" else ext))
             out_paths.append(path)
         plt.close(fig)
@@ -385,6 +391,7 @@ def make_qq_plot_figure(mz, um_per_px=None, min_px=0, out_stem="width_qq",
         out_paths = []
         for ext in formats:
             path = f"{out_stem}.{ext}"
+            relabel_figure(fig)
             fig.savefig(path, dpi=dpi, format=("tiff" if ext == "tiff" else ext))
             out_paths.append(path)
         plt.close(fig)
@@ -477,6 +484,7 @@ def make_lognormal_gaussian_comparison_figure(mz, um_per_px=None, min_px=0,
         out_paths = []
         for ext in formats:
             path = f"{out_stem}.{ext}"
+            relabel_figure(fig)
             fig.savefig(path, dpi=dpi, format=("tiff" if ext == "tiff" else ext))
             out_paths.append(path)
         plt.close(fig)
@@ -549,6 +557,7 @@ def make_width_area_count_figure(mz, um_per_px=None, min_px=12, bins=24,
             path = f"{out_stem}.{ext}"
             # .tiff needs a raster dpi; .svg is vector and ignores dpi at draw time
             # but we pass it anyway so text/marker sizing stays consistent.
+            relabel_figure(fig)
             fig.savefig(path, dpi=dpi, format=("tiff" if ext == "tiff" else ext))
             out_paths.append(path)
         plt.close(fig)

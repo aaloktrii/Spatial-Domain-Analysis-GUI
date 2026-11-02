@@ -25,6 +25,7 @@ Also:
 Depends only on numpy / scipy / scikit-image.
 """
 
+from ..notation import column, keys, relabel
 import numpy as np
 from scipy import ndimage as ndi
 from skimage.morphology import skeletonize
@@ -74,7 +75,7 @@ def _save_lognormal_fits(fits, out_path, unit):
     for name, fit in fits.items():
         if fit is None:
             continue
-        payload[name] = {k: fit[k] for k in
+        payload[column(name)] = {k: fit[k] for k in
                          ("n", "median", "mode", "sigma_log", "mu_log",
                           "aic", "bic", "ks_stat", "ks_p")}
     with open(out_path, "w") as f:
@@ -104,7 +105,7 @@ def _save_fit_comparison(comparisons, out_path, unit):
         entry["delta_aic"] = cmp.get("delta_aic")
         entry["delta_bic"] = cmp.get("delta_bic")
         entry["preferred"] = cmp.get("preferred")
-        payload[name] = entry
+        payload[column(name)] = entry
     with open(out_path, "w") as f:
         json.dump(payload, f, indent=2)
     return out_path
@@ -409,11 +410,11 @@ def export_domain_stats(mz, roi=None, um_per_px=None, min_px=0, connectivity=1,
 
         summary[name] = entry
 
-        _write_csv(f"{out_stem}_areas_{name}.csv", ca[name]["areas_px"], "area_px",
+        _write_csv(f"{out_stem}_areas_{column(name)}.csv", ca[name]["areas_px"], "area_px",
                    ca[name].get("areas_um2"), "area_um2")
-        _write_csv(f"{out_stem}_widths_{name}.csv", w_px, "width_px",
+        _write_csv(f"{out_stem}_widths_{column(name)}.csv", w_px, "width_px",
                    (w_px * s_nm) if s_nm is not None else None, "width_nm")
-        _write_csv(f"{out_stem}_periods_{name}.csv", p_px, "period_px",
+        _write_csv(f"{out_stem}_periods_{column(name)}.csv", p_px, "period_px",
                    (p_px * s_nm) if s_nm is not None else None, "period_nm")
 
     summary["neutral"] = {"n_domains": ca["neutral"]["n_domains"],
@@ -425,7 +426,7 @@ def export_domain_stats(mz, roi=None, um_per_px=None, min_px=0, connectivity=1,
 
     out_json = f"{out_stem}.json"
     with open(out_json, "w") as f:
-        json.dump(summary, f, indent=2)
+        json.dump(keys(summary), f, indent=2)
     paths.append(out_json)
 
     return summary, paths
@@ -453,7 +454,7 @@ def summarize_domains(mz, roi, um_per_px=None, min_px=12, connectivity=1, layers
                         domain_width, _local_period_px) -- NOT the per-domain
                         equivalent-diameter fit make_distribution_figure
                         shows (that one is unreliable for a fused labyrinth
-                        maze, see METHODS.md Sec 11/14). {n, median, mode,
+                        maze, see docs/methods.md, sections 11 and 14). {n, median, mode,
                         sigma_log, mu_log, aic, bic, ks_stat, ks_p} in px, or
                         None if < 5 samples.
         mz           -- up/down rows: that state's AREA FRACTION of the
@@ -563,7 +564,7 @@ def export_domain_summary(mz, roi, um_per_px=None, min_px=12, connectivity=1,
         w = csv.DictWriter(f, fieldnames=cols)
         w.writeheader()
         for state in ("up", "down", "total"):
-            row = {"state": state, **summary[state]}
+            row = {"state": relabel(state), **summary[state]}
             w.writerow({c: row.get(c) for c in cols})
     return summary, out_path
 
@@ -622,7 +623,7 @@ def export_fit_summary(mm, um_per_px=None, out_path="fits.txt", title="", min_px
         f"          and local period; lengths in {unit}"
         + (f"; min_px={min_px}" if min_px is not None else ""),
         "note    : NOT the per-domain equivalent-diameter fit (unreliable for a",
-        "          fused labyrinth -- see METHODS.md Sec 11/14)",
+        "          fused labyrinth -- see docs/methods.md, sections 11 and 14)",
         "",
     ]
     for label, key in (("WIDTH", "widths_px"), ("PERIOD", "periods_px")):
@@ -635,7 +636,7 @@ def export_fit_summary(mm, um_per_px=None, out_path="fits.txt", title="", min_px
             lines.extend(_block(vals))
             lines.append("")
     with open(out_path, "w") as f:
-        f.write("\n".join(lines).rstrip() + "\n")
+        f.write(relabel("\n".join(lines).rstrip()) + "\n")
     return out_path
 
 

@@ -1,4 +1,5 @@
 """Flake statistics and pipeline-step figures (used by the batch export). Plotting layer."""
+from .labels import relabel_figure
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
@@ -33,6 +34,7 @@ def flake_stats_figure(img, mz, roi, nd, out_png, title=""):
     if title:
         fig.suptitle(title, fontsize=12)
     plt.tight_layout()
+    relabel_figure(plt.gcf())
     plt.savefig(out_png, dpi=130); plt.close(fig)
 
 
@@ -106,5 +108,6 @@ def _detailed_pipeline_figure(layers, mz, mm, m_field, um, out_png, stem, args,
     for a in ax.ravel():
         for im in a.get_images():
             im.set_rasterized(True)
+    relabel_figure(plt.gcf())
     plt.savefig(out_png, dpi=110); plt.close(fig)
     return out_png

@@ -28,6 +28,7 @@ Notes
 * The input must be an UNCALIBRATED table (area_units = px). If it is already
   calibrated, the tool warns and refuses (to avoid double-scaling).
 """
+from ..notation import column
 import os
 import csv
 import sys
@@ -109,8 +110,8 @@ def main():
 
     out_cols = list(rows[0].keys())
     for _, new, _ in CONVERSIONS:
-        if new not in out_cols:
-            out_cols.append(new)
+        if column(new) not in out_cols:
+            out_cols.append(column(new))
 
     n_warn = 0
     for row in rows:
@@ -123,7 +124,8 @@ def main():
         row["calibrated"] = True
         row["area_units"] = "um^2"
         for src, new, kind in CONVERSIONS:
-            v = to_float(row.get(src))
+            new = column(new)                                     # up / down -> pos / neg
+            v = to_float(row.get(column(src), row.get(src)))      # tables written before 2.0 use up / down
             if v is None:
                 row[new] = None; continue
             if kind == AREA:

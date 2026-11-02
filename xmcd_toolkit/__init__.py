@@ -1,7 +1,7 @@
 """
 xmcd_toolkit
 ============
-Quantitative analysis of magnetic domains in XMCD-PEEM images of
+Quantitative analysis of magnetic domains in X-PEEM images (XMCD and XLD) of
 Graphene/Fe3GeTe2/WTe2 (and related) SOT heterostructures.
 
 Layers (TensorSpec rules): core/ = analysis (numpy / scipy / scikit-image, no plotting, no GUI);
@@ -18,10 +18,10 @@ Public API
 
 Definitions
 -----------
-Magnetization (local):   XMCD asymmetry A = (I+ - I-)/(I+ + I-)  ~  M_z
-Order parameter:         <m_z> = (A_up - A_down)/(A_up + A_down)   in [-1, 1]
+Signal (local):          dichroism asymmetry A = (I1 - I2)/(I1 + I2): XMCD (circular) or XLD (linear)
+Order parameter:         <m> = (A_+ve - A_-ve)/(A_+ve + A_-ve) in [-1, 1]   (shown as <v_N> for XLD)
 Number density (local):  n_s(area) = N_s(area) / N_total(area)     (a fraction)
-Net change:              d<m_z> = <m_z>_after - <m_z>_before
+Net change:              d<m> = <m>_after - <m>_before
 """
 
 __version__ = "2.0.0"

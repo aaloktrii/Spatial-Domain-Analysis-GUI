@@ -1,8 +1,9 @@
-"""sda-analyze -- flake-area statistical analysis of XMCD-PEEM images.
+"""sda-analyze -- flake-area statistical analysis of X-PEEM images (XMCD, XLD).
 
            one row per image -> plot stats vs current
 
 Command line (thin layer over services/ and core/)."""
+from ..notation import column
 import os
 import csv
 import sys
@@ -16,7 +17,7 @@ from ..services.batch import SUMMARY_COLS, analyze_one, collect_targets
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Flake-area statistical analysis of XMCD-PEEM images.")
+    ap = argparse.ArgumentParser(description="Flake-area statistical analysis of X-PEEM images (XMCD, XLD).")
     ap.add_argument("paths", nargs="*", default=["."],
                     help="image files and/or folders (default: current dir)")
     ap.add_argument("--recursive", action="store_true", help="descend into sub-folders")
@@ -76,7 +77,9 @@ def main():
                     help="map zero, as TensorSpec's Sym ±: 0 (the --bg mean if given), or the median / mean "
                          "in --bg, else of the map without its edge drift strips")
     ap.add_argument("--invert", action="store_true", default=DEFAULTS["invert"],
-                    help="swap up and down (a map whose colours mean the opposite sign)")
+                    help="swap +ve and -ve (a map whose colours mean the opposite sign)")
+    ap.add_argument("--dichroism", default=DEFAULTS["dichroism"], choices=("XMCD", "XLD"),
+                    help="order parameter in the outputs: XMCD <m>, XLD (XMLD + XNLD) <v_N>; states are +ve / -ve")
     ap.add_argument("--fig-format", default=DEFAULTS["fig_format"], dest="fig_format",
                     choices=("png", "eps", "pdf"),
                     help="publication figure format for figures/ and the pipeline "
@@ -84,7 +87,7 @@ def main():
                          "for journal submission)")
     # --- controls for "too much gray inside the active area" ---
     ap.add_argument("--states", type=int, choices=(2, 3), default=DEFAULTS["states"],
-                    help="2 = hard up/down (no gray neutral); 3 = up/none/down")
+                    help="2 = +ve / -ve only (no neutral band); 3 = +ve / neutral / -ve")
     ap.add_argument("--clahe", action="store_true",
                     help="local contrast enhancement to pull weak domains out of gray")
     ap.add_argument("--roi", type=int, nargs=4, metavar=("X0", "Y0", "X1", "Y1"),
@@ -136,10 +139,10 @@ def main():
     if rows:
         out_csv = os.path.join(table_dir, "summary_table.csv")
         with open(out_csv, "w", newline="") as f:
-            w = csv.DictWriter(f, fieldnames=SUMMARY_COLS)
+            w = csv.DictWriter(f, fieldnames=[column(k) for k in SUMMARY_COLS])     # up / down -> pos / neg
             w.writeheader()
             for r in rows:
-                w.writerow({k: r.get(k) for k in SUMMARY_COLS})
+                w.writerow({column(k): r.get(k) for k in SUMMARY_COLS})
 
         # run-info / calibration provenance record
         import datetime

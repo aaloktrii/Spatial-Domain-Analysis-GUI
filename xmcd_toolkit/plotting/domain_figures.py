@@ -1,4 +1,5 @@
 """Figures for core/domain.py (plotting layer, no analysis)."""
+from .labels import relabel_figure
 import numpy as np
 from scipy import ndimage as ndi
 from skimage import filters, morphology, measure, restoration, exposure
@@ -38,5 +39,6 @@ def make_domain_figure(metrics, layers, out_png, title=""):
     txt = (f"net m = {m['net_magnetization']:+.3f}   up/down = {m['frac_up']:.2f}/{m['frac_down']:.2f}\n"
            f"flake area = {area_str}   domains = {m['n_domains_total']}   wall density = {wall_str}")
     fig.suptitle((title + "\n" if title else "") + txt, fontsize=11)
+    relabel_figure(plt.gcf())
     plt.tight_layout(rect=[0, 0, 1, 0.90]); plt.savefig(out_png, dpi=130); plt.close(fig)
     return out_png

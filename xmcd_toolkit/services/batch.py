@@ -1,5 +1,9 @@
 """Batch flake analysis of one image -> statistics, tables, figures (analyze_one and helpers; used by
 sda-analyze and the GUI export). Qt-free service layer: calls core/ for numbers and plotting/ for figures."""
+import contextlib
+import io
+
+from ..notation import column, relabel, using
 import os
 import re
 import glob
@@ -73,6 +77,16 @@ def parse_filename(stem):
 
 
 def analyze_one(path, args, outroot):
+    """Analyse one image and write its statistics, tables and figures. State names in every output are +ve / -ve
+    and the order parameter that of args.dichroism (notation.py)."""
+    buf = io.StringIO()
+    with using(getattr(args, "dichroism", "XMCD")), contextlib.redirect_stdout(buf):
+        row = _analyze_one(path, args, outroot)
+    print(relabel(buf.getvalue(), getattr(args, "dichroism", "XMCD")), end="")
+    return row
+
+
+def _analyze_one(path, args, outroot):
     stem = os.path.splitext(os.path.basename(path))[0]
     # default: save results NEXT TO the source image; --outdir overrides
     base = outroot if outroot else os.path.dirname(os.path.abspath(path))
@@ -199,7 +213,7 @@ def analyze_one(path, args, outroot):
     boundary = domain_boundary(m_field, roi,
                                method=getattr(args, "boundary_method", "zero_contour"),
                                m_threshold=(args.m_threshold or 0.05))
-    pubfigures.up_down_states(img0, mz, roi, pf("up_down_states"),
+    pubfigures.up_down_states(img0, mz, roi, pf(column("up_down_states")),
                               title=f"{stem} -- up/down states")
     pubfigures.asymmetry_map(m_field, roi, pf("asymmetry"),
                              title=f"{stem} -- asymmetry m")
@@ -458,7 +472,7 @@ def analyze_one(path, args, outroot):
         "report median + area fractions, not mean domain area.",
     ]
     with open(p("statistics.txt"), "w") as f:
-        f.write("\n".join(lines) + "\n")
+        f.write(relabel("\n".join(lines)) + "\n")
 
     print(f"[{stem}] <m_z>={pl['net_m']:+.3f}  "
           f"p(+/0/-)={pl['p_up']:.2f}/{pl['p_zero']:.2f}/{pl['p_down']:.2f}  "
