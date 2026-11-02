@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.venv/
+venv/
+.DS_Store
+outputs/
+*_analysis/
+*.nc
+examples/data/*
+!examples/data/device_25_7_example.png

@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "spatial-domain-analysis"
+version = "2.0.0"
+description = "Quantitative analysis and comparison of magnetic domains in XMCD-PEEM images"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Aalok Tiwari" }]
+requires-python = ">=3.10"
+keywords = ["XMCD", "PEEM", "magnetic domains", "domain analysis", "image analysis", "spintronics"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Topic :: Scientific/Engineering :: Image Processing",
+]
+dependencies = [
+    "numpy>=1.24",
+    "scipy>=1.10",
+    "scikit-image>=0.21",
+    "matplotlib>=3.7",
+    "pillow>=9.5",
+    "tifffile>=2023.1",
+    "xarray>=2024.10",
+    "netCDF4>=1.6",
+]
+
+[project.optional-dependencies]
+gui = ["PySide6>=6.5"]
+test = ["pytest>=7"]
+
+[project.scripts]
+sda-analyze = "xmcd_toolkit.cli.analyze:main"
+sda-compare = "xmcd_toolkit.cli.compare:main"
+sda-calibrate = "xmcd_toolkit.cli.calibrate:main"
+sda-export-figures = "xmcd_toolkit.cli.export_figures:main"
+
+[project.gui-scripts]
+sda-gui = "xmcd_toolkit.gui.app:main"
+
+[project.urls]
+Repository = "https://github.com/aaloktrii/Spatial-Domain-Analysis-GUI"
+
+[tool.setuptools.packages.find]
+include = ["xmcd_toolkit*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
