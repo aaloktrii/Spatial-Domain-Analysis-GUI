@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.1.0 – 2026-11-02
 
 - **+ve / −ve everywhere**: the two states are called +ve and −ve (0 = neutral band) on screen, in every exported
   figure, report and table, for XMCD and XLD alike, since the domains may be out-of-plane or in-plane; the physical
