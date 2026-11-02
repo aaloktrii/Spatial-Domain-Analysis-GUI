@@ -5,6 +5,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 Quantitative analysis and comparison of magnetic domains in XMCD-PEEM images.
+This toolkit is part of a broader general-purpose framework for N-dimensional spectroscopic analysis
+([TensorSpec](https://github.com/fawkesdx/TensorSpec)).
 
 The toolkit turns an XMCD asymmetry map into up / neutral / down domains and measures them: area fractions and
 ⟨m_z⟩, domain counts, sizes, widths, periods and walls, with correlation-corrected statistics. Two images (for
