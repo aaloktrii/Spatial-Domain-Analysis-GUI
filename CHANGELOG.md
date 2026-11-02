@@ -10,6 +10,8 @@
 - **Table columns renamed** `up` / `down` → `pos` / `neg` (e.g. `frac_up` → `frac_pos`, `n_domains_down` →
   `n_domains_neg`), also in the per-state CSV and JSON files; `sda-calibrate` still reads older tables.
 - Fixed: the colour bar of the "domain skeletons" TIFF panel used the width map of the previous panel.
+- **No measured data in the repository**: the example image is replaced by two synthetic labyrinthine domain images
+  (`examples/make_synthetic.py`, `examples/data/labyrinth_A.png`, `labyrinth_B.png`).
 
 ## 2.0.0 – 2026-11-01
 

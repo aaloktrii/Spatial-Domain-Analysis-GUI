@@ -9,7 +9,7 @@ job without a GUI. `tests/test_structure_and_math.py` enforces the layer rules.
 .
 ├── README.md  LICENSE  CITATION.cff  CHANGELOG.md  pyproject.toml
 ├── docs/                methods.md (the analysis, step by step), gui.md (the program), architecture.md (this file)
-├── examples/            domain_example.py, stats_example.py, data/device_25_7_example.png
+├── examples/            domain_example.py, stats_example.py, make_synthetic.py, data/ (two synthetic images)
 ├── tests/               layer rules + maths (python -m pytest)
 └── xmcd_toolkit/
     ├── __init__.py      public API: every name importable as before (from xmcd_toolkit import ...)
