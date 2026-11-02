@@ -24,7 +24,7 @@ Number density (local):  n_s(area) = N_s(area) / N_total(area)     (a fraction)
 Net change:              d<m> = <m>_after - <m>_before
 """
 
-__version__ = "2.0.0"
+__version__ = "2.1.0"
 __author__ = "Aalok Tiwari"
 __license__ = "MIT"
 

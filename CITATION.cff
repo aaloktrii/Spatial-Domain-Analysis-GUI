@@ -6,8 +6,8 @@ authors:
   - family-names: "Tiwari"
     given-names: "Aalok"
     orcid: "https://orcid.org/0009-0003-6832-4220"
-version: "2.0.0"
-date-released: "2026-11-01"
+version: "2.1.0"
+date-released: "2026-11-02"
 license: MIT
 repository-code: "https://github.com/aaloktrii/Spatial-Domain-Analysis-GUI"
 keywords:
