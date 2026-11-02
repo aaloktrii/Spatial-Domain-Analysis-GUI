@@ -184,8 +184,9 @@ independent domain) is
     N_eff = N_pixels / τ_A
     SE_corrected = σ / sqrt(N_eff)
 
-On the example image this gave `ξ = 6 px`, `N_eff ≈ 202` (vs 24,315 pixels),
-and `SE_corrected ≈ 11 × SE_naive`.
+For a domain pattern with ξ of a few pixels, `N_eff` is typically two orders of
+magnitude below the pixel count and the corrected standard error an order of
+magnitude above the naive one.
 
 **Confidence intervals.** Analytic 95% CI uses the corrected error and the
 t-distribution with `N_eff − 1` dof. Independently, a **block bootstrap**

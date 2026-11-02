@@ -10,5 +10,3 @@ venv/
 outputs/
 *_analysis/
 *.nc
-examples/data/*
-!examples/data/device_25_7_example.png

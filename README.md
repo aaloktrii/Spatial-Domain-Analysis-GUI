@@ -81,7 +81,16 @@ p = pdf_three_state(mz, region=roi)
 print(p["p_up"], p["p_zero"], p["p_down"])
 ```
 
-Runnable examples on the bundled image: `python examples/domain_example.py` and `python examples/stats_example.py`.
+**Example data.** `examples/data/` holds two **synthetic** labyrinthine domain images, A and B (the same flake,
+B with part of the pattern changed); no measured data are included. They are made by `examples/make_synthetic.py`.
+
+```bash
+python examples/domain_example.py                  # domain analysis of labyrinth_A.png (or: ... my_map.png)
+python examples/stats_example.py                   # three-state statistics
+sda-compare examples/data/labyrinth_A.png examples/data/labyrinth_B.png
+```
+
+In `sda-gui`, add both images to try the Align and Compare views.
 
 ## Documentation
 
