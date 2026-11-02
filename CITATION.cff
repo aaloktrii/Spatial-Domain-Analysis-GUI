@@ -1,0 +1,29 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "Spatial Domain Analysis Toolkit"
+type: software
+authors:
+  - family-names: "Tiwari"
+    given-names: "Aalok"
+    orcid: "https://orcid.org/0009-0003-6832-4220"
+version: "2.0.0"
+date-released: "2026-11-01"
+license: MIT
+repository-code: "https://github.com/aaloktrii/Spatial-Domain-Analysis-GUI"
+keywords:
+  - XMCD
+  - PEEM
+  - magnetic domains
+  - image analysis
+abstract: >-
+  Quantitative analysis and pixel-by-pixel comparison of magnetic domains in
+  XMCD-PEEM images: three-state classification, domain statistics and
+  morphometry, alignment of image pairs, and switching and population changes.
+doi: "10.5281/zenodo.22087856"
+identifiers:
+  - type: doi
+    value: "10.5281/zenodo.22087856"
+    description: "Concept DOI: all versions (resolves to the latest)"
+  - type: doi
+    value: "10.5281/zenodo.22087857"
+    description: "Version SDA_v1 (2026-08-24)"
