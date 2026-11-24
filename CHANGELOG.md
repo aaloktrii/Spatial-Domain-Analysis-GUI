@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.2.0 – 2026-11-23
 
 - `sda-gui` started without a session opens with the synthetic example pair (`examples/data/labyrinth_A.png`,
   `labyrinth_B.png`) loaded; *File > Clear Workspace* starts empty.
