@@ -4,6 +4,10 @@
 sda-gui                 # or: sda-gui session.nc      (python -m xmcd_toolkit.gui.app also works)
 ```
 
+Started without a session, it opens with the synthetic example pair `examples/data/labyrinth_A.png` (A, before)
+and `labyrinth_B.png` (B, after) already added, so every view can be tried at once; *File > Clear Workspace*
+starts empty. (In an installation without the `examples/` folder it starts empty.)
+
 One window: a **File** menu (Add Images…, Load Session…, Save Session…, Clear Workspace), the numbered steps on
 the left, and three views on the right: **Domains | Align | Compare**. The steps of the current view are shown;
 step 1 is always visible. Figures have a compact toolbar whose **Export…** saves a vector PDF / SVG or a

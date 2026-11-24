@@ -3,7 +3,8 @@ File menu; a non-collapsible splitter with the numbered control steps on the lef
 current view only, step 1 always) and the views on the right (Domains | Align | Compare, document-mode tabs).
 GUI layer only: one shared services.workspace.Workspace holds the data.
 
-Run:  sda-gui [session.nc]      or      python -m xmcd_toolkit.gui.app [session.nc]"""
+Run:  sda-gui [session.nc]      or      python -m xmcd_toolkit.gui.app [session.nc]
+Without a session the synthetic example pair (examples/data/labyrinth_A.png, labyrinth_B.png) is loaded."""
 import sys
 from pathlib import Path
 
@@ -19,6 +20,9 @@ from .widgets import tidy_forms  # noqa: E402
 
 IMAGE_FILTER = "Images (*.png *.tif *.tiff *.jpg *.jpeg *.bmp *.gif *.webp);;All files (*)"
 TITLE = "TensorSpec - XMCD Domains"
+# synthetic example pair loaded at start-up when no session is given (present in a source checkout only)
+EXAMPLE_IMAGES = [Path(__file__).resolve().parents[2] / "examples" / "data" / n
+                  for n in ("labyrinth_A.png", "labyrinth_B.png")]
 
 
 class Main(QtWidgets.QMainWindow):
@@ -139,6 +143,14 @@ class Main(QtWidgets.QMainWindow):
         self.refresh()
         self.status(self.lStatus.text() + "; draw the active area (step 2), then press Calculate (step 5)")
 
+    def load_examples(self):
+        """Load the synthetic example pair (A before, B after) if this is a source checkout; else start empty."""
+        fs = [str(p) for p in EXAMPLE_IMAGES if p.is_file()]
+        if fs:
+            self.add_images(fs)
+            self.domains.list.setCurrentRow(0)                  # show A (before) first
+            self.status(self.lStatus.text() + " (examples loaded; File > Clear Workspace to start empty)")
+
     def save(self):
         if not self.ws.images:
             return
@@ -182,6 +194,8 @@ def main():
     win = Main(sys.argv[1] if len(sys.argv) > 1 else None)
     win.resize(1400, 900)   # the PEEM suite opens at 1100 x 750; three views need a little more room
     win.show()
+    if len(sys.argv) <= 1:                                   # no session given: open with the example pair
+        QtCore.QTimer.singleShot(0, win.load_examples)
     sys.exit(app.exec())
 
 

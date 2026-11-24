@@ -56,7 +56,9 @@ pip install -e ".[gui]"                                 # without ".[gui]": libr
 sda-gui
 ```
 
-Add images, draw the active area (and a background region), press **Calculate**. See [docs/gui.md](docs/gui.md).
+It opens with the two synthetic example images (`examples/data/labyrinth_A.png`, `labyrinth_B.png`) loaded;
+*File > Clear Workspace* starts empty. Add images, draw the active area (and a background region), press
+**Calculate**. See [docs/gui.md](docs/gui.md).
 
 **Command line**
 

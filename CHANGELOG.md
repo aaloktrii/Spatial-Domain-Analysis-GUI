@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- `sda-gui` started without a session opens with the synthetic example pair (`examples/data/labyrinth_A.png`,
+  `labyrinth_B.png`) loaded; *File > Clear Workspace* starts empty.
+
 ## 2.1.0 – 2026-11-02
 
 - **+ve / −ve everywhere**: the two states are called +ve and −ve (0 = neutral band) on screen, in every exported
